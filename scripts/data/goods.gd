@@ -9,3 +9,11 @@ const BASE_PRICES := {
 	GoodType.STONE: 3.0,
 	GoodType.FOOD: 2.0,
 }
+
+## M18: englische Anzeigenamen für UI-Texte (HUD, BuildMenu, InfoPanel).
+const DISPLAY_NAMES := {
+	GoodType.WOOD: "Wood",
+	GoodType.PLANKS: "Planks",
+	GoodType.STONE: "Stone",
+	GoodType.FOOD: "Food",
+}

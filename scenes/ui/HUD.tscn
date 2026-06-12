@@ -32,6 +32,11 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
 
+[node name="DayLabel" type="Label" parent="Row"]
+layout_mode = 2
+vertical_alignment = 1
+text = "Day 1"
+
 [node name="GoldLabel" type="Label" parent="Row"]
 layout_mode = 2
 vertical_alignment = 1
@@ -40,27 +45,27 @@ text = "Gold: 0"
 [node name="PopLabel" type="Label" parent="Row"]
 layout_mode = 2
 vertical_alignment = 1
-text = "Bev: 0"
+text = "Pop: 0"
 
 [node name="WoodLabel" type="Label" parent="Row"]
 layout_mode = 2
 vertical_alignment = 1
-text = "Holz: 0"
+text = "Wood: 0"
 
 [node name="PlanksLabel" type="Label" parent="Row"]
 layout_mode = 2
 vertical_alignment = 1
-text = "Bretter: 0"
+text = "Planks: 0"
 
 [node name="StoneLabel" type="Label" parent="Row"]
 layout_mode = 2
 vertical_alignment = 1
-text = "Stein: 0"
+text = "Stone: 0"
 
 [node name="FoodLabel" type="Label" parent="Row"]
 layout_mode = 2
 vertical_alignment = 1
-text = "Nahrung: 0"
+text = "Food: 0"
 
 [node name="Spacer" type="Control" parent="Row"]
 layout_mode = 2
@@ -88,8 +93,8 @@ text = "3x"
 
 [node name="SaveButton" type="Button" parent="Row"]
 layout_mode = 2
-text = "Speichern"
+text = "Save"
 
 [node name="LoadButton" type="Button" parent="Row"]
 layout_mode = 2
-text = "Laden"
+text = "Load"

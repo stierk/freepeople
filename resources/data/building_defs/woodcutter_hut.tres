@@ -5,14 +5,18 @@
 [resource]
 script = ExtResource("1")
 type = 4
-display_name = "Holzfällerhütte"
-footprint_size = Vector2i(1, 1)
+display_name = "Woodcutter's Hut"
+footprint_size = Vector2i(2, 2)
 sprite_atlas_region = Rect2i(0, 425, 16, 16)
 max_capacity = 2
 build_time_seconds = 10.0
 is_player_placeable = false
 build_cost_gold = 0.0
+build_cost = {
+0: 20.0
+}
 storage_capacity = {}
+
 output_good = 0
 output_amount = 1.0
 output_interval = 12.0

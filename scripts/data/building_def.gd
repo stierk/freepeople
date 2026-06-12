@@ -3,7 +3,8 @@ extends Resource
 
 enum BuildingType {
 	STORAGE_YARD, GRANARY, TREASURY, MARKET,
-	WOODCUTTER_HUT, SAWMILL_HUT, QUARRY_HUT, FARMER_HUT, ROAD
+	WOODCUTTER_HUT, SAWMILL_HUT, QUARRY_HUT, FARMER_HUT, ROAD,
+	TOWN_HALL
 }
 
 @export var type: BuildingType = BuildingType.STORAGE_YARD
@@ -14,6 +15,8 @@ enum BuildingType {
 @export var build_time_seconds: float = 0.0
 @export var is_player_placeable: bool = false
 @export var build_cost_gold: float = 0.0
+## M13/M14: Baukosten in Gütern (Goods.GoodType -> Menge), z.B. {0: 20.0} = 20 Holz
+@export var build_cost: Dictionary = {}
 @export var storage_capacity: Dictionary = {}
 
 # Produktionskonfiguration (M7)

@@ -5,15 +5,19 @@
 [resource]
 script = ExtResource("1")
 type = 7
-display_name = "Bauernhütte"
-footprint_size = Vector2i(1, 1)
+display_name = "Farm House"
+footprint_size = Vector2i(2, 2)
 sprite_atlas_region = Rect2i(153, 425, 16, 16)
 max_capacity = 2
 build_time_seconds = 10.0
 is_player_placeable = false
 build_cost_gold = 0.0
+build_cost = {
+0: 10.0,
+2: 10.0
+}
 storage_capacity = {}
 output_good = 3
 output_amount = 1.0
-output_interval = 12.0
+output_interval = 60.0
 carry_capacity = 1.0

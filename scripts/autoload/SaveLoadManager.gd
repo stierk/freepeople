@@ -9,6 +9,16 @@ signal game_saved
 
 const SAVE_PATH := "user://savegame.json"
 const SAVE_VERSION := 1
+const AUTO_SAVE_INTERVAL := 60.0
+
+
+func _ready() -> void:
+	var timer := Timer.new()
+	timer.wait_time = AUTO_SAVE_INTERVAL
+	timer.autostart = true
+	timer.timeout.connect(save_game)
+	add_child(timer)
+	print("[M10:AutoSave] Auto-save aktiviert (alle %ds)." % AUTO_SAVE_INTERVAL)
 
 
 func has_save() -> bool:
@@ -71,6 +81,12 @@ func _serialize_buildings() -> Array:
 				"demand_counter": _stringify_keys(b.market_data.demand_counter),
 				"supply_counter": _stringify_keys(b.market_data.supply_counter),
 			}
+		if b.trade_data != null:
+			entry["trade_data"] = {
+				"buy_price": _stringify_keys(b.trade_data.buy_price),
+				"sell_price": _stringify_keys(b.trade_data.sell_price),
+				"daily_tax": b.trade_data.daily_tax,
+			}
 		result.append(entry)
 	return result
 
@@ -87,6 +103,7 @@ func _serialize_inhabitants() -> Array:
 			"inventory": _stringify_keys(inh.inventory),
 			"gold": inh.gold,
 			"hunger": inh.hunger,
+			"missed_meals": inh.missed_meals,
 			"production_timer": inh.production_timer,
 		})
 	return result
@@ -147,6 +164,10 @@ func _deserialize(data: Dictionary) -> void:
 	GlobalInventory.notify_resources_changed()
 	GlobalInventory.notify_population_changed(GameState.population_count())
 
+	# M18: ein gespeicherter Spielstand mit Bevölkerung 0 bedeutet Game Over.
+	if GameState.inhabitants.is_empty():
+		GameState.game_over.emit(SimulationManager.get_current_day())
+
 
 func _deserialize_tiles(tiles_data: Array) -> void:
 	var tiles: Array = []
@@ -189,6 +210,14 @@ func _deserialize_building(entry: Dictionary) -> BuildingInstance:
 		md.supply_counter = _intify_keys(md_entry.get("supply_counter", {}))
 		b.market_data = md
 
+	if entry.has("trade_data"):
+		var td_entry: Dictionary = entry["trade_data"]
+		var td := TradeData.new()
+		td.buy_price = _intify_keys(td_entry.get("buy_price", {}))
+		td.sell_price = _intify_keys(td_entry.get("sell_price", {}))
+		td.daily_tax = td_entry.get("daily_tax", 0.0)
+		b.trade_data = td
+
 	return b
 
 
@@ -207,6 +236,7 @@ func _deserialize_inhabitant(entry: Dictionary) -> InhabitantData:
 	inh.inventory = _intify_keys(entry.get("inventory", {}))
 	inh.gold = entry.get("gold", 0.0)
 	inh.hunger = entry.get("hunger", 0.0)
+	inh.missed_meals = entry.get("missed_meals", 0)
 	inh.production_timer = entry.get("production_timer", 0.0)
 
 	# Bewegungs-/Lieferzustände werden nicht persistiert (kein Pfad gespeichert) –

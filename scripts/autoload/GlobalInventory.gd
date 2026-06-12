@@ -28,6 +28,11 @@ func spend_gold(amount: float) -> bool:
 	return true
 
 
+## M18: setzt die Krongold-Kasse für einen Neustart zurück.
+func reset_state() -> void:
+	gold = 100.0
+
+
 # ---------------------------------------------------------------------------
 # Ressourcen-Aggregat – aggregiert über ALLE konstruierten Gebäude
 # ---------------------------------------------------------------------------

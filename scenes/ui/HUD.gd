@@ -1,7 +1,8 @@
-## HUD – M9
-## Obere Leiste: Gold, Bevölkerung, Ressourcen, Zeitsteuerung, Speichern/Laden.
+## HUD – M9/M18
+## Top bar: day counter, gold, population, resources, speed controls, save/load.
 extends Control
 
+@onready var day_label: Label = $Row/DayLabel
 @onready var gold_label: Label = $Row/GoldLabel
 @onready var pop_label: Label = $Row/PopLabel
 @onready var wood_label: Label = $Row/WoodLabel
@@ -35,6 +36,15 @@ func _ready() -> void:
 	_refresh_resources()
 	_on_population_changed(GameState.population_count())
 	_update_speed_buttons()
+	_refresh_day()
+
+
+func _process(_delta: float) -> void:
+	_refresh_day()
+
+
+func _refresh_day() -> void:
+	day_label.text = "Day %d" % SimulationManager.get_current_day()
 
 
 func _on_gold_changed(new_amount: float) -> void:
@@ -42,14 +52,14 @@ func _on_gold_changed(new_amount: float) -> void:
 
 
 func _refresh_resources() -> void:
-	wood_label.text = "Holz: %d" % int(GlobalInventory.get_community_total(Goods.GoodType.WOOD))
-	planks_label.text = "Bretter: %d" % int(GlobalInventory.get_community_total(Goods.GoodType.PLANKS))
-	stone_label.text = "Stein: %d" % int(GlobalInventory.get_community_total(Goods.GoodType.STONE))
-	food_label.text = "Nahrung: %d" % int(GlobalInventory.get_food())
+	wood_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.WOOD], int(GlobalInventory.get_community_total(Goods.GoodType.WOOD))]
+	planks_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.PLANKS], int(GlobalInventory.get_community_total(Goods.GoodType.PLANKS))]
+	stone_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.STONE], int(GlobalInventory.get_community_total(Goods.GoodType.STONE))]
+	food_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.FOOD], int(GlobalInventory.get_food())]
 
 
 func _on_population_changed(new_count: int) -> void:
-	pop_label.text = "Bev: %d" % new_count
+	pop_label.text = "Pop: %d" % new_count
 
 
 func _on_speed_pressed(mode: SimulationManager.SpeedMode) -> void:

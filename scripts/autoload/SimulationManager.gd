@@ -21,15 +21,22 @@ const RESOURCE_REGEN_CHANCE := 0.3
 # --- Debug-Logging ---
 const DEBUG_LOG_INTERVAL := 15.0
 
-# --- M8: Markt + Nahrung + Bevölkerung ---
-const FOOD_PER_INHABITANT_PER_TICK := 0.3
-const FOOD_CONSUMPTION_INTERVAL := 10.0
+# --- M17/M18: Tageslänge (1 Tag = 60s Echtzeit bei normaler Geschwindigkeit) ---
+const DAY_LENGTH_SECONDS := 60.0
+
+# --- M8/M18: Markt + Nahrung + Bevölkerung ---
+## M18: 1 Nahrung pro Bewohner und Mahlzeit; 3 Mahlzeiten pro Tag (DAY_LENGTH_SECONDS/3).
+const FOOD_PER_INHABITANT_PER_TICK := 1.0
+const FOOD_CONSUMPTION_INTERVAL := DAY_LENGTH_SECONDS / 3.0
 const HUNGER_MARKET_THRESHOLD := 0.5
 const FOOD_PER_MARKET_VISIT := 3.0
 const POP_GROWTH_FOOD_THRESHOLD := 25.0
 const POP_GROWTH_INTERVAL := 45.0
 const POP_MAX := 32
 const TITHE_SALE_INTERVAL := 30.0
+## M18: nach so vielen in Folge verpassten Mahlzeiten (= 1 Tag "starved" + 1 weitere
+## verpasste Mahlzeit) verhungert ein Bewohner.
+const STARVATION_DEATH_MEALS := 4
 
 ## Markt-Handel: ab dieser Lagermenge gilt ein Gut als "Überschuss" und wird verkauft
 const MARKET_SURPLUS_THRESHOLD := {
@@ -61,6 +68,7 @@ var _food_consumption_accum: float = 0.0
 var _pop_growth_accum: float = 0.0
 var _tithe_accum: float = 0.0
 var _market_price_accum: float = 0.0
+var _daily_tax_accum: float = 0.0
 
 
 func _process(delta: float) -> void:
@@ -102,6 +110,11 @@ func _process(delta: float) -> void:
 	if _market_price_accum >= MarketData.PRICE_UPDATE_INTERVAL:
 		_market_price_accum -= MarketData.PRICE_UPDATE_INTERVAL
 		_update_market_prices()
+
+	_daily_tax_accum += sim_delta
+	if _daily_tax_accum >= DAY_LENGTH_SECONDS:
+		_daily_tax_accum -= DAY_LENGTH_SECONDS
+		_process_daily_tax()
 
 	_debug_log_accum += sim_delta
 	if _debug_log_accum >= DEBUG_LOG_INTERVAL:
@@ -180,13 +193,22 @@ func _process_food_consumption() -> void:
 		hunger_recovery = food_available / total_needed
 		granary.community_stock[Goods.GoodType.FOOD] = 0.0
 
+	var starved: Array[int] = []
 	for inh: InhabitantData in GameState.inhabitants:
 		if hunger_recovery >= 1.0:
 			inh.hunger = maxf(0.0, inh.hunger - 0.1)
+			inh.missed_meals = 0
 		else:
 			inh.hunger = minf(1.0, inh.hunger + (1.0 - hunger_recovery) * 0.15)
+			inh.missed_meals += 1
+			if inh.missed_meals >= STARVATION_DEATH_MEALS:
+				starved.append(inh.id)
 		if inh.hunger >= HUNGER_MARKET_THRESHOLD and inh.state == InhabitantData.State.WORKING:
 			_start_market_trip(inh)
+
+	for id in starved:
+		print("[M18:Tod] Bewohner %d ist verhungert." % id)
+		GameState.remove_inhabitant(id)
 
 	GlobalInventory.notify_resources_changed()
 
@@ -206,10 +228,10 @@ func _process_population_growth() -> void:
 
 	granary.community_stock[Goods.GoodType.FOOD] = food - 5.0
 
-	var storage := BuildingManager.get_storage_yard()
+	var town_hall := BuildingManager.get_town_hall()
 	var spawn_cell: Vector2i
-	if storage != null:
-		spawn_cell = storage.cell + Vector2i(0, 1)
+	if town_hall != null:
+		spawn_cell = town_hall.cell + Vector2i(1, town_hall.def.footprint_size.y)
 	else:
 		spawn_cell = WorldGrid.MAP_SIZE / 2
 
@@ -242,6 +264,25 @@ func _process_tithe_sale() -> void:
 
 
 # ---------------------------------------------------------------------------
+# M17: Tägliche Kopfsteuer (Schatzkammer)
+# ---------------------------------------------------------------------------
+func _process_daily_tax() -> void:
+	var tax := BuildingManager.get_daily_tax()
+	if tax <= 0.0:
+		return
+
+	var total := 0.0
+	for inh: InhabitantData in GameState.inhabitants:
+		var pay := minf(inh.gold, tax)
+		inh.gold -= pay
+		total += pay
+
+	if total > 0.0:
+		GlobalInventory.add_gold(total)
+		print("[M17:Steuer] %.1f Gold Kopfsteuer eingenommen." % total)
+
+
+# ---------------------------------------------------------------------------
 # M8: Markt nimmt Waren, verteilt Nahrung, aktualisiert Preise
 # ---------------------------------------------------------------------------
 func _update_market_prices() -> void:
@@ -268,7 +309,7 @@ func _process_market_trade(md: MarketData, storage: BuildingInstance, granary: B
 			continue
 		var sell_amount: float = (amount - threshold) * MARKET_SELL_FRACTION
 		storage.community_stock[good] = amount - sell_amount
-		var price: float = md.prices.get(good, Goods.BASE_PRICES[good])
+		var price: float = BuildingManager.get_sell_price(good)
 		revenue += sell_amount * price
 		md.record_sale(good, sell_amount)
 
@@ -279,7 +320,7 @@ func _process_market_trade(md: MarketData, storage: BuildingInstance, granary: B
 	GlobalInventory.add_gold(revenue - food_budget)
 
 	if granary != null:
-		var food_price: float = md.prices.get(Goods.GoodType.FOOD, Goods.BASE_PRICES[Goods.GoodType.FOOD])
+		var food_price: float = BuildingManager.get_buy_price(Goods.GoodType.FOOD)
 		var food_amount: float = food_budget / food_price
 		granary.community_stock[Goods.GoodType.FOOD] = granary.community_stock.get(Goods.GoodType.FOOD, 0.0) + food_amount
 		md.record_purchase(Goods.GoodType.FOOD, food_amount)
@@ -390,10 +431,29 @@ func _handle_moving_to_build(inhabitant: InhabitantData) -> void:
 	hut.is_constructed = false
 	hut.occupants.append(inhabitant.id)
 	inhabitant.home_building_id = hut.id
-	WorldGrid.set_building_footprint(hut.cell, hut.id, true)
+	WorldGrid.set_building_footprint_rect(hut.cell, def.footprint_size, hut.id, true)
 	hut.construction_timer = def.build_time_seconds
 	hut.production_timer = def.output_interval
+	_pay_hut_build_cost(def, inhabitant)
 	inhabitant.state = InhabitantData.State.BUILDING
+
+
+## M14: zieht die Baukosten der Hütte aus dem zuständigen Gemeinschaftslager
+## (mit Rathaus-Fallback) ab. Reicht der Lagerbestand nicht, zahlt der Bewohner
+## den fehlenden Anteil zum aktuellen Einkaufspreis aus eigenem Gold zu.
+func _pay_hut_build_cost(def: BuildingDef, inhabitant: InhabitantData) -> void:
+	for good: int in def.build_cost.keys():
+		var needed: float = def.build_cost[good]
+		if needed <= 0.0:
+			continue
+		var storage := BuildingManager.get_storage_for_good(good)
+		var taken := storage.withdraw_community(good, needed) if storage != null else 0.0
+		var missing := needed - taken
+		if missing <= 0.0:
+			continue
+		var price := BuildingManager.get_buy_price(good)
+		var cost := missing * price
+		inhabitant.gold = maxf(0.0, inhabitant.gold - cost)
 
 
 func _handle_building(inhabitant: InhabitantData, delta: float) -> void:
@@ -521,13 +581,31 @@ func _regenerate_resources() -> void:
 				tile.resource_amount = minf(1.0, tile.resource_amount + RESOURCE_REGEN_AMOUNT)
 
 
+## M18: aktueller Tag (1-basiert) für HUD-Anzeige und Highscore.
+func get_current_day() -> int:
+	return int(sim_time / DAY_LENGTH_SECONDS) + 1
+
+
+## M18: setzt die Simulationszeit/-zähler für einen Neustart zurück.
+func reset_state() -> void:
+	speed_mode = SpeedMode.NORMAL
+	sim_time = 0.0
+	_resource_regen_accum = 0.0
+	_debug_log_accum = 0.0
+	_food_consumption_accum = 0.0
+	_pop_growth_accum = 0.0
+	_tithe_accum = 0.0
+	_market_price_accum = 0.0
+	_daily_tax_accum = 0.0
+
+
 func _print_stock_summary() -> void:
 	var storage := BuildingManager.get_storage_yard()
 	var granary := BuildingManager.get_granary()
-	var wood   := storage.community_stock.get(Goods.GoodType.WOOD,   0.0) if storage else 0.0
-	var planks := storage.community_stock.get(Goods.GoodType.PLANKS, 0.0) if storage else 0.0
-	var stone  := storage.community_stock.get(Goods.GoodType.STONE,  0.0) if storage else 0.0
-	var food   := granary.community_stock.get(Goods.GoodType.FOOD,   0.0) if granary else 0.0
+	var wood: float   = storage.community_stock.get(Goods.GoodType.WOOD,   0.0) if storage else 0.0
+	var planks: float = storage.community_stock.get(Goods.GoodType.PLANKS, 0.0) if storage else 0.0
+	var stone: float  = storage.community_stock.get(Goods.GoodType.STONE,  0.0) if storage else 0.0
+	var food: float   = granary.community_stock.get(Goods.GoodType.FOOD,   0.0) if granary else 0.0
 	print("[M8:Lager] t=%.0fs | Holz=%.1f Bretter=%.1f Stein=%.1f Nahrung=%.1f | Gold=%.1f | Bev=%d" % [
 		sim_time, wood, planks, stone, food,
 		GlobalInventory.gold, GameState.population_count()

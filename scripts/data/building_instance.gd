@@ -20,6 +20,8 @@ var production_timer: float = 0.0
 var output_stock: Dictionary = {}
 ## Markt-Preisbildungs-Daten (M8: nur bei BuildingType.MARKET befüllt)
 var market_data: MarketData = null
+## An-/Verkaufspreise und Steuersatz (M14/M17: bei Lagerplatz/Kornspeicher/Schatzkammer befüllt)
+var trade_data: TradeData = null
 
 
 func deliver(good: int, amount: float) -> void:

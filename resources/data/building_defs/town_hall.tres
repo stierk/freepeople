@@ -4,20 +4,17 @@
 
 [resource]
 script = ExtResource("1")
-type = 0
-display_name = "Storage Yard"
-footprint_size = Vector2i(2, 2)
-sprite_atlas_region = Rect2i(425, 34, 16, 16)
-max_capacity = 2
+type = 9
+display_name = "Town Hall"
+footprint_size = Vector2i(3, 3)
+sprite_atlas_region = Rect2i(220, 355, 48, 48)
+max_capacity = 0
 build_time_seconds = 0.0
-is_player_placeable = true
+is_player_placeable = false
 build_cost_gold = 0.0
-build_cost = {
-0: 20.0,
-2: 20.0
-}
 storage_capacity = {
-0: 1000.0,
-1: 1000.0,
-2: 1000.0
+0: 100000.0,
+1: 100000.0,
+2: 100000.0,
+3: 100000.0
 }

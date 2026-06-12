@@ -10,8 +10,8 @@ anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -180.0
-offset_top = -120.0
+offset_left = -220.0
+offset_top = -220.0
 offset_right = -4.0
 offset_bottom = -20.0
 grow_horizontal = 0
@@ -42,7 +42,7 @@ grow_vertical = 2
 
 [node name="TitleLabel" type="Label" parent="Panel/VBox"]
 layout_mode = 2
-text = "Titel"
+text = "Title"
 
 [node name="BodyLabel" type="Label" parent="Panel/VBox"]
 layout_mode = 2
@@ -50,6 +50,9 @@ size_flags_vertical = 3
 autowrap_mode = 2
 text = ""
 
+[node name="ActionBox" type="VBoxContainer" parent="Panel/VBox"]
+layout_mode = 2
+
 [node name="CloseButton" type="Button" parent="Panel/VBox"]
 layout_mode = 2
-text = "Schließen"
+text = "Close"

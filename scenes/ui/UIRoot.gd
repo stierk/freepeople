@@ -5,3 +5,4 @@ extends CanvasLayer
 @onready var hud: Control = $HUD
 @onready var build_menu: Control = $BuildMenu
 @onready var info_panel: Control = $InfoPanel
+@onready var game_over_panel: Control = $GameOverPanel

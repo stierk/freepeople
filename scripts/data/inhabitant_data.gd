@@ -28,6 +28,8 @@ var gold: float = 0.0
 var production_timer: float = 0.0
 
 var hunger: float = 0.0
+## M18: Anzahl in Folge verpasster Mahlzeiten (Hunger-Einfärbung, Tod bei STARVATION_DEATH_MEALS)
+var missed_meals: int = 0
 var node_ref: Node2D = null
 
 var target_site_cell: Vector2i = Vector2i(-1, -1)

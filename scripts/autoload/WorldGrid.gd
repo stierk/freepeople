@@ -127,6 +127,32 @@ func set_building_footprint(cell: Vector2i, building_id: int, solid: bool) -> vo
 	astar.set_point_solid(cell, solid)
 
 
+## M11: Alle Zellen eines mehrzelligen Footprints (origin = oben links).
+func get_footprint_cells(origin: Vector2i, size: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for y in range(size.y):
+		for x in range(size.x):
+			cells.append(origin + Vector2i(x, y))
+	return cells
+
+
+## M11: Prüft ob ein gesamter mehrzelliger Footprint bebaubar ist
+## (alle Zellen gültig, begehbar und unbesetzt).
+func is_footprint_buildable(origin: Vector2i, size: Vector2i) -> bool:
+	for cell in get_footprint_cells(origin, size):
+		if not is_walkable(cell):
+			return false
+		if get_tile(cell).building_id != -1:
+			return false
+	return true
+
+
+## M11: set_building_footprint über alle Zellen eines mehrzelligen Footprints.
+func set_building_footprint_rect(origin: Vector2i, size: Vector2i, building_id: int, solid: bool) -> void:
+	for cell in get_footprint_cells(origin, size):
+		set_building_footprint(cell, building_id, solid)
+
+
 func world_to_cell(world_pos: Vector2) -> Vector2i:
 	return Vector2i(floori(world_pos.x / TILE_SIZE), floori(world_pos.y / TILE_SIZE))
 

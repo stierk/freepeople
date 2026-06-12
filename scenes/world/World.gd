@@ -47,23 +47,29 @@ func _render_terrain() -> void:
 			_render_overlay_cell(cell)
 
 
+## M12: Einziges Start-Gebäude ist das kostenlose Rathaus, das die Startressourcen
+## des Spielers (100 Holz/Stein/Nahrung) sowie spätere Lieferungen aufnimmt,
+## solange noch kein Lagerplatz/Kornspeicher existiert (siehe BuildingManager Fallback).
 func _place_start_buildings() -> void:
 	var center := WorldGrid.MAP_SIZE / 2
-	_place_building(BuildingDef.BuildingType.STORAGE_YARD, center + Vector2i(-2, 0))
-	_place_building(BuildingDef.BuildingType.GRANARY,      center + Vector2i(-1, 0))
-	_place_building(BuildingDef.BuildingType.TREASURY,     center)
-	_place_building(BuildingDef.BuildingType.MARKET,       center + Vector2i(1, 0))  # M8
+	var town_hall := _place_building(BuildingDef.BuildingType.TOWN_HALL, center - Vector2i(1, 1))
+	town_hall.community_stock[Goods.GoodType.WOOD] = 100.0
+	town_hall.community_stock[Goods.GoodType.STONE] = 100.0
+	town_hall.community_stock[Goods.GoodType.FOOD] = 100.0
 
 
+## M11: unterstützt mehrzellige Footprints (origin = obere linke Ecke).
 func _place_building(type: BuildingDef.BuildingType, cell: Vector2i) -> BuildingInstance:
-	var tile := WorldGrid.get_tile(cell)
-	tile.terrain = TileRuntimeData.TerrainType.GRASS
-	terrain_layer.set_cell(cell, 0, ATLAS_GRASS)
-	overlay_layer.erase_cell(cell)
-
 	var def := BuildingManager.get_building_def(type)
+
+	for c in WorldGrid.get_footprint_cells(cell, def.footprint_size):
+		var tile := WorldGrid.get_tile(c)
+		tile.terrain = TileRuntimeData.TerrainType.GRASS
+		terrain_layer.set_cell(c, 0, ATLAS_GRASS)
+		overlay_layer.erase_cell(c)
+
 	var instance := BuildingManager.register_building(def, cell)
-	WorldGrid.set_building_footprint(cell, instance.id, true)
+	WorldGrid.set_building_footprint_rect(cell, def.footprint_size, instance.id, true)
 	_instantiate_building_node(instance)
 
 	return instance
@@ -73,7 +79,8 @@ func _instantiate_building_node(instance: BuildingInstance) -> void:
 	var node := BUILDING_BASE_SCENE.instantiate()
 	buildings_container.add_child(node)
 	node.setup(instance.def, instance.id)
-	node.position = WorldGrid.cell_to_world(instance.cell)
+	# M11: Node-Position ist die obere linke Ecke des (mehrzelligen) Footprints.
+	node.position = Vector2(instance.cell * WorldGrid.TILE_SIZE)
 	instance.node_ref = node
 
 
@@ -82,19 +89,21 @@ func _on_building_constructed(building_id: int) -> void:
 	_instantiate_building_node(instance)
 
 
-## M9: Vom Spieler über das Baumenü platziertes Gebäude registrieren und anzeigen.
+## M9/M11: Vom Spieler über das Baumenü platziertes Gebäude registrieren und anzeigen
+## (unterstützt mehrzellige Footprints).
 func place_player_building(def: BuildingDef, cell: Vector2i) -> BuildingInstance:
 	var instance := BuildingManager.register_building(def, cell)
-	WorldGrid.set_building_footprint(cell, instance.id, true)
-	overlay_layer.erase_cell(cell)
+	WorldGrid.set_building_footprint_rect(cell, def.footprint_size, instance.id, true)
+	for c in WorldGrid.get_footprint_cells(cell, def.footprint_size):
+		overlay_layer.erase_cell(c)
 	_instantiate_building_node(instance)
 	GlobalInventory.notify_resources_changed()
 	return instance
 
 
 func _spawn_initial_inhabitants() -> void:
-	var storage := BuildingManager.get_storage_yard()
-	var spawn_cell := storage.cell + Vector2i(0, 1)
+	var town_hall := BuildingManager.get_town_hall()
+	var spawn_cell := town_hall.cell + Vector2i(1, town_hall.def.footprint_size.y)
 
 	# Signal ist schon verbunden; initial direkt spawnen ohne Signal-Umweg,
 	# da add_inhabitant das Signal feuert und _on_inhabitant_added den Node anlegt.

@@ -26,21 +26,44 @@ func _on_tile_tapped(cell: Vector2i) -> void:
 	var building := BuildingManager.get_building_at_cell(cell)
 	if building != null:
 		ui_root.info_panel.show_building(building)
-	else:
-		ui_root.info_panel.hide_panel()
+		return
+
+	## M16: Bewohner anklicken zeigt Beruf + Berufswechsel-Buttons im InfoPanel.
+	var inhabitant := GameState.get_inhabitant_at_cell(cell)
+	if inhabitant != null:
+		ui_root.info_panel.show_inhabitant(inhabitant)
+		return
+
+	ui_root.info_panel.hide_panel()
 
 
-## M9: Platzierung prüfen (gültige Zelle, Gras, frei, bezahlbar) und ausführen.
+## M9/M11/M13: Platzierung prüfen (gesamter Footprint begehbar/frei, bezahlbar) und ausführen.
 func _try_place_building(def: BuildingDef, cell: Vector2i) -> bool:
-	if not WorldGrid.is_valid_cell(cell):
+	if not WorldGrid.is_footprint_buildable(cell, def.footprint_size):
 		return false
-	var tile := WorldGrid.get_tile(cell)
-	if tile.terrain != TileRuntimeData.TerrainType.GRASS:
-		return false
-	if tile.building_id != -1:
-		return false
-	if not GlobalInventory.spend_gold(def.build_cost_gold):
+	if not _can_afford_build_cost(def):
 		return false
 
+	_pay_build_cost(def)
 	world.place_player_building(def, cell)
 	return true
+
+
+## M13: prüft sowohl Gold- als auch Güterkosten (build_cost), bevor bezahlt wird.
+func _can_afford_build_cost(def: BuildingDef) -> bool:
+	if GlobalInventory.gold < def.build_cost_gold:
+		return false
+	for good: int in def.build_cost.keys():
+		var needed: float = def.build_cost[good]
+		var building := BuildingManager.get_storage_for_good(good)
+		if building == null or building.community_stock.get(good, 0.0) < needed:
+			return false
+	return true
+
+
+func _pay_build_cost(def: BuildingDef) -> void:
+	GlobalInventory.spend_gold(def.build_cost_gold)
+	for good: int in def.build_cost.keys():
+		var amount: float = def.build_cost[good]
+		var building := BuildingManager.get_storage_for_good(good)
+		building.withdraw_community(good, amount)

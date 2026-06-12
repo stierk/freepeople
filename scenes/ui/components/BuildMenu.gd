@@ -20,10 +20,24 @@ func _ready() -> void:
 
 		var button := Button.new()
 		button.toggle_mode = true
-		button.text = "%s\n%d Gold" % [def.display_name, int(def.build_cost_gold)]
+		button.text = "%s\n%s" % [def.display_name, _format_cost(def)]
 		button.pressed.connect(_on_button_pressed.bind(def))
 		column.add_child(button)
 		_buttons[def.type] = button
+
+
+## M13: zeigt sowohl Güter- als auch Goldkosten an.
+func _format_cost(def: BuildingDef) -> String:
+	var parts: PackedStringArray = []
+	for good: int in def.build_cost.keys():
+		var amount: float = def.build_cost[good]
+		if amount > 0.0:
+			parts.append("%d %s" % [int(amount), Goods.DISPLAY_NAMES[good]])
+	if def.build_cost_gold > 0.0:
+		parts.append("%d Gold" % int(def.build_cost_gold))
+	if parts.is_empty():
+		return "Free"
+	return ", ".join(parts)
 
 
 func set_active_def(def: BuildingDef) -> void:

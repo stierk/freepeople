@@ -5,6 +5,9 @@ const SITE_SAMPLE_COUNT := 10
 const CANDIDATE_RADIUS := 3
 const NEAREST_RESOURCE_PREFILTER := 5
 
+## M14/M15: Mindestanzahl freier Grasfelder rund um eine Bauernhütte für Feldfelder.
+const CROP_PLOT_MIN_CLEAR := 4
+
 const NEIGHBOR_DIRS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 
 const ALPHA := {
@@ -29,6 +32,8 @@ func _init(p_world_grid, p_building_manager) -> void:
 	building_manager = p_building_manager
 
 
+## M14: berücksichtigt den mehrzelligen Footprint der jeweiligen Hütte sowie
+## (für Bauern) freie Feldfelder rund um die Hütte.
 func find_best_site(profession: InhabitantData.Profession) -> Vector2i:
 	var resource_cells := _get_relevant_resource_cells(profession)
 	var storage := _get_relevant_storage(profession)
@@ -37,12 +42,16 @@ func find_best_site(profession: InhabitantData.Profession) -> Vector2i:
 
 	var alpha: float = ALPHA[profession]
 	var beta: float = BETA[profession]
+	var footprint_size := _get_footprint_size(profession)
 
 	var best_cell := Vector2i(-1, -1)
 	var best_score := -INF
 
 	for cell in _sample_candidate_cells(resource_cells):
-		if not world_grid.is_walkable(cell) or world_grid.get_tile(cell).building_id != -1:
+		if not world_grid.is_footprint_buildable(cell, footprint_size):
+			continue
+		if profession == InhabitantData.Profession.FARMER \
+				and not _has_clear_crop_plots(cell, footprint_size):
 			continue
 
 		var dist_resource := _nearest_resource_path_cost(cell, resource_cells)
@@ -56,6 +65,27 @@ func find_best_site(profession: InhabitantData.Profession) -> Vector2i:
 			best_cell = cell
 
 	return best_cell
+
+
+func _get_footprint_size(profession: InhabitantData.Profession) -> Vector2i:
+	var building_type: BuildingDef.BuildingType = building_manager.PROFESSION_TO_BUILDING_TYPE[profession]
+	return building_manager.get_building_def(building_type).footprint_size
+
+
+## M14/M15: prüft, ob rund um den Footprint genügend freie Grasfelder für Feldfelder liegen.
+func _has_clear_crop_plots(origin: Vector2i, size: Vector2i) -> bool:
+	var clear_count := 0
+	for y in range(-1, size.y + 1):
+		for x in range(-1, size.x + 1):
+			if x >= 0 and x < size.x and y >= 0 and y < size.y:
+				continue
+			var cell := origin + Vector2i(x, y)
+			if not world_grid.is_valid_cell(cell):
+				continue
+			var tile = world_grid.get_tile(cell)
+			if tile.terrain == TileRuntimeData.TerrainType.GRASS and tile.building_id == -1:
+				clear_count += 1
+	return clear_count >= CROP_PLOT_MIN_CLEAR
 
 
 func _get_relevant_resource_cells(profession: InhabitantData.Profession) -> Array:

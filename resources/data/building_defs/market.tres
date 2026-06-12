@@ -5,11 +5,15 @@
 [resource]
 script = ExtResource("1")
 type = 3
-display_name = "Marktplatz"
-footprint_size = Vector2i(1, 1)
+display_name = "Marketplace"
+footprint_size = Vector2i(3, 3)
 sprite_atlas_region = Rect2i(170, 0, 16, 16)
 max_capacity = 2
 build_time_seconds = 0.0
 is_player_placeable = true
-build_cost_gold = 50.0
+build_cost_gold = 10.0
+build_cost = {
+0: 10.0,
+2: 10.0
+}
 storage_capacity = {}
