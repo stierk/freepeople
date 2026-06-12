@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BuildingDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/building_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+type = 2
+display_name = "Goldkammer"
+footprint_size = Vector2i(1, 1)
+sprite_atlas_region = Rect2i(646, 170, 16, 16)
+max_capacity = 2
+build_time_seconds = 0.0
+is_player_placeable = false
+build_cost_gold = 0.0
+storage_capacity = {}
