@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+GlobalInventory="*res://scripts/autoload/GlobalInventory.gd"
 GameState="*res://scripts/autoload/GameState.gd"
 WorldGrid="*res://scripts/autoload/WorldGrid.gd"
 BuildingManager="*res://scripts/autoload/BuildingManager.gd"

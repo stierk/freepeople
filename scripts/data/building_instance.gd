@@ -14,7 +14,12 @@ var crown_stock: Dictionary = {}
 var occupants: Array[int] = []
 var construction_timer: float = 0.0
 var is_constructed: bool = true
+## Countdown bis zur nächsten Produktion (M7: wird von SimulationManager getaktet)
 var production_timer: float = 0.0
+## Erzeugte Güter die auf Abholung durch einen Bewohner warten (M7)
+var output_stock: Dictionary = {}
+## Markt-Preisbildungs-Daten (M8: nur bei BuildingType.MARKET befüllt)
+var market_data: MarketData = null
 
 
 func deliver(good: int, amount: float) -> void:

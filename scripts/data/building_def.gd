@@ -15,3 +15,17 @@ enum BuildingType {
 @export var is_player_placeable: bool = false
 @export var build_cost_gold: float = 0.0
 @export var storage_capacity: Dictionary = {}
+
+# Produktionskonfiguration (M7)
+## GoodType-Wert des erzeugten Guts (-1 = kein Produktionsgebäude)
+@export var output_good: int = -1
+## Menge die pro Zyklus erzeugt wird
+@export var output_amount: float = 1.0
+## Sekunden pro Produktionszyklus (0 = kein Produktionsgebäude)
+@export var output_interval: float = 0.0
+## Benötigtes Eingangsgut (-1 = kein Input nötig, z.B. Sägewerk braucht Holz)
+@export var input_good: int = -1
+## Menge des Eingangs-Guts pro Zyklus
+@export var input_amount: float = 0.0
+## Wie viel ein Bewohner pro Transportfahrt tragen kann
+@export var carry_capacity: float = 1.0
