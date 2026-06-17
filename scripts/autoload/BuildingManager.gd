@@ -92,6 +92,14 @@ func get_storage_yard() -> BuildingInstance:
 	return get_town_hall()
 
 
+## Echtes Lagergebäude vorhanden? (Im Gegensatz zu get_storage_yard, das auf das
+## Rathaus zurückfällt.) Wird genutzt, um SAWMILL_WORKER-Auswahl und -Standortsuche
+## zu blockieren, solange noch kein Lagerplatz steht – sonst würden Sägewerke
+## rund ums Rathaus gebaut.
+func has_storage_yard() -> bool:
+	return not get_buildings_by_type(BuildingDef.BuildingType.STORAGE_YARD).is_empty()
+
+
 func get_granary() -> BuildingInstance:
 	var list := get_buildings_by_type(BuildingDef.BuildingType.GRANARY)
 	if not list.is_empty():
@@ -117,10 +125,12 @@ func get_market() -> BuildingInstance:
 	return list[0] if not list.is_empty() else null
 
 
+## Liefert eine Huette (fertig oder noch im Bau) mit freier Kapazitaet, damit mehrere
+## Bewohner sich eine gemeinsame Huette teilen statt jeweils eine eigene zu bauen.
 func get_understaffed_hut(profession: InhabitantData.Profession) -> BuildingInstance:
 	var building_type: BuildingDef.BuildingType = PROFESSION_TO_BUILDING_TYPE[profession]
 	for b in buildings:
-		if b.def.type == building_type and b.is_constructed and b.occupants.size() < b.def.max_capacity:
+		if b.def.type == building_type and b.occupants.size() < b.def.max_capacity:
 			return b
 	return null
 

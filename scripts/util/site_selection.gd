@@ -97,6 +97,11 @@ func _get_relevant_resource_cells(profession: InhabitantData.Profession) -> Arra
 		InhabitantData.Profession.FARMER:
 			return _farmland_cells()
 		InhabitantData.Profession.SAWMILL_WORKER:
+			# Solange kein echter Lagerplatz steht, keinen Standort suchen –
+			# sonst würde der Rathaus-Fallback dazu führen, dass Sägewerke
+			# rund um das Rathaus gebaut werden.
+			if not building_manager.has_storage_yard():
+				return []
 			var storage = building_manager.get_storage_yard()
 			return [storage.cell] if storage != null else []
 		_:

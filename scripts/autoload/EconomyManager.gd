@@ -17,10 +17,12 @@ func assign_profession_for_new_inhabitant() -> InhabitantData.Profession:
 
 	if food < FOOD_LOW_THRESHOLD:
 		return InhabitantData.Profession.FARMER
-	if planks < PLANKS_LOW_THRESHOLD:
-		return InhabitantData.Profession.SAWMILL_WORKER
 	if wood < WOOD_LOW_THRESHOLD:
 		return InhabitantData.Profession.WOODCUTTER
+	# Ohne echten Lagerplatz würden Sägewerke per Rathaus-Fallback rund ums
+	# Rathaus gebaut – das ist nicht gewollt. Erst zuweisen, wenn ein Lagerplatz steht.
+	if BuildingManager.has_storage_yard() and planks < PLANKS_LOW_THRESHOLD:
+		return InhabitantData.Profession.SAWMILL_WORKER
 	if stone < STONE_LOW_THRESHOLD:
 		return InhabitantData.Profession.QUARRY_WORKER
 	return InhabitantData.Profession.WOODCUTTER
