@@ -5,7 +5,7 @@ const SPEED_MULTIPLIERS := {
 	SpeedMode.PAUSED: 0.0,
 	SpeedMode.NORMAL: 1.0,
 	SpeedMode.FAST: 2.0,
-	SpeedMode.FASTEST: 3.0,
+	SpeedMode.FASTEST: 5.0,
 }
 
 # --- Produktionskonstanten (M7) ---
@@ -421,12 +421,30 @@ func _handle_moving_to_build(inhabitant: InhabitantData) -> void:
 		return
 
 	var home := BuildingManager.get_building(inhabitant.home_building_id)
-	if home != null and home.is_constructed:
-		inhabitant.state = InhabitantData.State.WORKING
+	if home != null:
+		inhabitant.state = InhabitantData.State.WORKING if home.is_constructed else InhabitantData.State.BUILDING
+		return
+
+	# Inzwischen koennte eine andere Person fuer denselben Beruf bereits eine
+	# Huette (fertig oder im Bau) mit freiem Platz registriert haben – dieser
+	# Bewohner zieht dann dort ein, statt eine eigene Huette danebenzubauen.
+	var shared_hut := BuildingManager.get_understaffed_hut(inhabitant.profession)
+	if shared_hut != null:
+		shared_hut.occupants.append(inhabitant.id)
+		inhabitant.home_building_id = shared_hut.id
+		inhabitant.path = WorldGrid.find_path(inhabitant.cell, shared_hut.cell)
+		inhabitant.path_index = 0
 		return
 
 	var building_type: BuildingDef.BuildingType = BuildingManager.PROFESSION_TO_BUILDING_TYPE[inhabitant.profession]
 	var def := BuildingManager.get_building_def(building_type)
+
+	# Der zuvor gewaehlte Standort koennte inzwischen von jemand anderem bebaut
+	# worden sein - dann neuen Standort suchen statt die bestehende Huette zu ueberbauen.
+	if not WorldGrid.is_footprint_buildable(inhabitant.target_site_cell, def.footprint_size):
+		inhabitant.state = InhabitantData.State.SEEKING_SITE
+		return
+
 	var hut := BuildingManager.register_building(def, inhabitant.target_site_cell)
 	hut.is_constructed = false
 	hut.occupants.append(inhabitant.id)

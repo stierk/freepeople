@@ -103,7 +103,7 @@ func _add_trade_data_editors(building: BuildingInstance) -> void:
 		_add_price_row("Head Tax (Gold/day)", td.daily_tax, _on_daily_tax_changed.bind(building.id))
 		return
 
-	var goods: Array[int] = [Goods.GoodType.FOOD] if building.def.type == BuildingDef.BuildingType.GRANARY \
+	var goods: Array = [Goods.GoodType.FOOD] if building.def.type == BuildingDef.BuildingType.GRANARY \
 		else [Goods.GoodType.WOOD, Goods.GoodType.PLANKS, Goods.GoodType.STONE]
 
 	for good in goods:

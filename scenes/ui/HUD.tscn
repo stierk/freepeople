@@ -89,12 +89,12 @@ text = "2x"
 [node name="Speed3" type="Button" parent="Row"]
 layout_mode = 2
 toggle_mode = true
-text = "3x"
+text = "5x"
 
-[node name="SaveButton" type="Button" parent="Row"]
+[node name="RestartButton" type="Button" parent="Row"]
 layout_mode = 2
-text = "Save"
+text = "Restart"
 
-[node name="LoadButton" type="Button" parent="Row"]
-layout_mode = 2
-text = "Load"
+[node name="RestartConfirmDialog" type="ConfirmationDialog" parent="."]
+title = "Restart Game"
+dialog_text = "Restart the game? All progress will be lost."

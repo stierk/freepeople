@@ -25,6 +25,21 @@ func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
 
+## M18: setzt das Spiel komplett zurück (Speicherstand löschen, alle Manager
+## zurücksetzen, Szene neu laden). Wird vom Neustart-Button in HUD und
+## GameOverPanel verwendet.
+func restart_game() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(SAVE_PATH)
+
+	GlobalInventory.reset_state()
+	GameState.reset_state()
+	BuildingManager.reset_state()
+	SimulationManager.reset_state()
+
+	get_tree().reload_current_scene()
+
+
 # ---------------------------------------------------------------------------
 # Speichern
 # ---------------------------------------------------------------------------
@@ -158,7 +173,7 @@ func _deserialize(data: Dictionary) -> void:
 	GameState.set_next_inhabitant_id(data.get("next_inhabitant_id", 0))
 
 	for b: BuildingInstance in BuildingManager.buildings:
-		WorldGrid.set_building_footprint(b.cell, b.id, true)
+		WorldGrid.set_building_footprint_rect(b.cell, b.def.footprint_size, b.id, true)
 
 	GlobalInventory.gold_changed.emit(GlobalInventory.gold)
 	GlobalInventory.notify_resources_changed()

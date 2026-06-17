@@ -51,12 +51,4 @@ func _save_highscore(days_survived: int) -> void:
 
 
 func _on_restart_pressed() -> void:
-	if FileAccess.file_exists(SaveLoadManager.SAVE_PATH):
-		DirAccess.remove_absolute(SaveLoadManager.SAVE_PATH)
-
-	GlobalInventory.reset_state()
-	GameState.reset_state()
-	BuildingManager.reset_state()
-	SimulationManager.reset_state()
-
-	get_tree().reload_current_scene()
+	SaveLoadManager.restart_game()

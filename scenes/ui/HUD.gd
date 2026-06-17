@@ -1,5 +1,5 @@
 ## HUD – M9/M18
-## Top bar: day counter, gold, population, resources, speed controls, save/load.
+## Top bar: day counter, gold, population, resources, speed controls, restart.
 extends Control
 
 @onready var day_label: Label = $Row/DayLabel
@@ -15,8 +15,8 @@ extends Control
 @onready var speed2_button: Button = $Row/Speed2
 @onready var speed3_button: Button = $Row/Speed3
 
-@onready var save_button: Button = $Row/SaveButton
-@onready var load_button: Button = $Row/LoadButton
+@onready var restart_button: Button = $Row/RestartButton
+@onready var restart_confirm_dialog: ConfirmationDialog = $RestartConfirmDialog
 
 
 func _ready() -> void:
@@ -29,8 +29,8 @@ func _ready() -> void:
 	speed2_button.pressed.connect(_on_speed_pressed.bind(SimulationManager.SpeedMode.FAST))
 	speed3_button.pressed.connect(_on_speed_pressed.bind(SimulationManager.SpeedMode.FASTEST))
 
-	save_button.pressed.connect(_on_save_pressed)
-	load_button.pressed.connect(_on_load_pressed)
+	restart_button.pressed.connect(_on_restart_pressed)
+	restart_confirm_dialog.confirmed.connect(_on_restart_confirmed)
 
 	_on_gold_changed(GlobalInventory.gold)
 	_refresh_resources()
@@ -74,10 +74,9 @@ func _update_speed_buttons() -> void:
 	speed3_button.set_pressed_no_signal(SimulationManager.speed_mode == SimulationManager.SpeedMode.FASTEST)
 
 
-func _on_save_pressed() -> void:
-	SaveLoadManager.save_game()
+func _on_restart_pressed() -> void:
+	restart_confirm_dialog.popup_centered()
 
 
-func _on_load_pressed() -> void:
-	if SaveLoadManager.has_save():
-		SaveLoadManager.load_game()
+func _on_restart_confirmed() -> void:
+	SaveLoadManager.restart_game()
