@@ -2,7 +2,14 @@ extends Node2D
 
 signal building_tapped(building_id: int)
 
-const TILESET_TEXTURE := preload("res://assets/kenney_roguelike_rpg/Spritesheet/roguelikeSheet_transparent.png")
+## Gebäude-Sprites stammen aus verschiedenen Sheets (fliegevolge_overworld) bzw. dem
+## Alt-Bestand (pixelholes). Schlüssel = BuildingDef.sprite_sheet.
+const SHEETS := {
+	"base": preload("res://assets/fliegevolge_overworld/BaseSet.png"),
+	"farm": preload("res://assets/fliegevolge_overworld/Farmlands.png"),
+	"vik": preload("res://assets/fliegevolge_overworld/Vikings.png"),
+	"px": preload("res://assets/pixelholes_overworld/MasterSimple.png"),
+}
 
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var click_area: Area2D = $ClickArea
@@ -21,7 +28,7 @@ func _ready() -> void:
 func setup(def: BuildingDef, instance_id: int) -> void:
 	building_id = instance_id
 	var atlas := AtlasTexture.new()
-	atlas.atlas = TILESET_TEXTURE
+	atlas.atlas = SHEETS.get(def.sprite_sheet, SHEETS["px"])
 	atlas.region = Rect2(def.sprite_atlas_region)
 	sprite.texture = atlas
 

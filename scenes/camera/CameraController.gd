@@ -25,7 +25,7 @@ func _ready() -> void:
 	position = map_pixel_size / 2.0
 
 
-func _input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		_handle_touch(event)
 	elif event is InputEventScreenDrag:

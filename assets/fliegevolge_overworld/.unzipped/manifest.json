@@ -1,0 +1,1000 @@
+{
+  "tile_size": 16,
+  "sheets": {
+    "base": {
+      "file": "BaseSet.png",
+      "px": [
+        640,
+        640
+      ],
+      "cols": 40,
+      "rows": 40
+    },
+    "farm": {
+      "file": "Farmlands.png",
+      "px": [
+        304,
+        224
+      ],
+      "cols": 19,
+      "rows": 14
+    },
+    "vik": {
+      "file": "Vikings.png",
+      "px": [
+        384,
+        320
+      ],
+      "cols": 24,
+      "rows": 20
+    }
+  },
+  "assets": [
+    {
+      "key": "rathaus_1_einfach",
+      "label": "Rathaus I (einfach)",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        27,
+        31,
+        27,
+        31
+      ],
+      "pixel_rect": [
+        432,
+        496,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/rathaus_1_einfach.png"
+    },
+    {
+      "key": "rathaus_2_verbesserung",
+      "label": "Rathaus II (Verbesserung)",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        4,
+        9,
+        6,
+        10
+      ],
+      "pixel_rect": [
+        64,
+        144,
+        48,
+        32
+      ],
+      "tiles_wide": 3,
+      "tiles_high": 2,
+      "asset": "sprites/rathaus_2_verbesserung.png"
+    },
+    {
+      "key": "rathaus_3_endstufe",
+      "label": "Rathaus III (Endstufe)",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        7,
+        9,
+        9,
+        10
+      ],
+      "pixel_rect": [
+        112,
+        144,
+        48,
+        32
+      ],
+      "tiles_wide": 3,
+      "tiles_high": 2,
+      "asset": "sprites/rathaus_3_endstufe.png"
+    },
+    {
+      "key": "rathaus_3_alt_burg",
+      "label": "Rathaus III ALT: Steinburg",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        32,
+        30,
+        37,
+        39
+      ],
+      "pixel_rect": [
+        512,
+        480,
+        96,
+        160
+      ],
+      "tiles_wide": 6,
+      "tiles_high": 10,
+      "asset": "sprites/rathaus_3_alt_burg.png"
+    },
+    {
+      "key": "rathaus_3_alt_kirche",
+      "label": "Rathaus III ALT: Kirche m. Turm",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        30,
+        36,
+        30,
+        39
+      ],
+      "pixel_rect": [
+        480,
+        576,
+        16,
+        64
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 4,
+      "asset": "sprites/rathaus_3_alt_kirche.png"
+    },
+    {
+      "key": "holzfaellerhuette",
+      "label": "Holzfaellerhuette (Rundhuette)",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        19,
+        12,
+        19,
+        12
+      ],
+      "pixel_rect": [
+        304,
+        192,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/holzfaellerhuette.png"
+    },
+    {
+      "key": "holzfaellerhuette_alt",
+      "label": "Holzfaellerhuette ALT (offene Scheune)",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        9,
+        11,
+        9,
+        11
+      ],
+      "pixel_rect": [
+        144,
+        176,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/holzfaellerhuette_alt.png"
+    },
+    {
+      "key": "saegewerk",
+      "label": "Saegewerk (Langhaus offen)",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        15,
+        9,
+        17,
+        14
+      ],
+      "pixel_rect": [
+        240,
+        144,
+        48,
+        96
+      ],
+      "tiles_wide": 3,
+      "tiles_high": 6,
+      "asset": "sprites/saegewerk.png"
+    },
+    {
+      "key": "holzstapel",
+      "label": "Holzstapel / Brennholz",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        9,
+        13,
+        9,
+        13
+      ],
+      "pixel_rect": [
+        144,
+        208,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/holzstapel.png"
+    },
+    {
+      "key": "holz_baumstaemme",
+      "label": "Baumstaemme (Lager)",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        23,
+        27,
+        23,
+        29
+      ],
+      "pixel_rect": [
+        368,
+        432,
+        16,
+        48
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 3,
+      "asset": "sprites/holz_baumstaemme.png"
+    },
+    {
+      "key": "farmhaus",
+      "label": "Farmhaus (Cottage m. Kamin)",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        1,
+        12,
+        2,
+        13
+      ],
+      "pixel_rect": [
+        16,
+        192,
+        32,
+        32
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 2,
+      "asset": "sprites/farmhaus.png"
+    },
+    {
+      "key": "farmhaus_alt",
+      "label": "Farmhaus ALT",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        0,
+        12,
+        1,
+        13
+      ],
+      "pixel_rect": [
+        0,
+        192,
+        32,
+        32
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 2,
+      "asset": "sprites/farmhaus_alt.png"
+    },
+    {
+      "key": "steinhauer_schmelze",
+      "label": "Steinhauer-Schmelze (4 ANIM frames)",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        20,
+        17,
+        23,
+        17
+      ],
+      "pixel_rect": [
+        320,
+        272,
+        64,
+        16
+      ],
+      "tiles_wide": 4,
+      "tiles_high": 1,
+      "asset": "sprites/steinhauer_schmelze.png"
+    },
+    {
+      "key": "felsbrocken_grau",
+      "label": "Abbaubare Felsen grau",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        6,
+        21,
+        9,
+        23
+      ],
+      "pixel_rect": [
+        96,
+        336,
+        64,
+        48
+      ],
+      "tiles_wide": 4,
+      "tiles_high": 3,
+      "asset": "sprites/felsbrocken_grau.png"
+    },
+    {
+      "key": "felsbrocken_braun",
+      "label": "Abbaubare Felsen braun",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        6,
+        24,
+        9,
+        26
+      ],
+      "pixel_rect": [
+        96,
+        384,
+        64,
+        48
+      ],
+      "tiles_wide": 4,
+      "tiles_high": 3,
+      "asset": "sprites/felsbrocken_braun.png"
+    },
+    {
+      "key": "steinklippe_grau",
+      "label": "Steinklippe grau",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        10,
+        21,
+        11,
+        23
+      ],
+      "pixel_rect": [
+        160,
+        336,
+        32,
+        48
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 3,
+      "asset": "sprites/steinklippe_grau.png"
+    },
+    {
+      "key": "steine_streu_grau",
+      "label": "Steine gestreut grau",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        12,
+        21,
+        20,
+        23
+      ],
+      "pixel_rect": [
+        192,
+        336,
+        144,
+        48
+      ],
+      "tiles_wide": 9,
+      "tiles_high": 3,
+      "asset": "sprites/steine_streu_grau.png"
+    },
+    {
+      "key": "steine_streu_braun",
+      "label": "Steine gestreut braun",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        12,
+        24,
+        20,
+        26
+      ],
+      "pixel_rect": [
+        192,
+        384,
+        144,
+        48
+      ],
+      "tiles_wide": 9,
+      "tiles_high": 3,
+      "asset": "sprites/steine_streu_braun.png"
+    },
+    {
+      "key": "fischerhuette",
+      "label": "Fischerhuette (Rundhuette)",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        19,
+        11,
+        19,
+        11
+      ],
+      "pixel_rect": [
+        304,
+        176,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/fischerhuette.png"
+    },
+    {
+      "key": "steg_pfaehle",
+      "label": "Steg-Pfaehle (Wasser)",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        20,
+        14,
+        23,
+        15
+      ],
+      "pixel_rect": [
+        320,
+        224,
+        64,
+        32
+      ],
+      "tiles_wide": 4,
+      "tiles_high": 2,
+      "asset": "sprites/steg_pfaehle.png"
+    },
+    {
+      "key": "boot_klein",
+      "label": "Boot klein",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        0,
+        18,
+        1,
+        19
+      ],
+      "pixel_rect": [
+        0,
+        288,
+        32,
+        32
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 2,
+      "asset": "sprites/boot_klein.png"
+    },
+    {
+      "key": "boot_segel",
+      "label": "Segelboot",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        8,
+        18,
+        9,
+        19
+      ],
+      "pixel_rect": [
+        128,
+        288,
+        32,
+        32
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 2,
+      "asset": "sprites/boot_segel.png"
+    },
+    {
+      "key": "jetty_planken",
+      "label": "Holzsteg auf Wasser",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        0,
+        27,
+        1,
+        27
+      ],
+      "pixel_rect": [
+        0,
+        432,
+        32,
+        16
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 1,
+      "asset": "sprites/jetty_planken.png"
+    },
+    {
+      "key": "lager_kisten",
+      "label": "Kisten/Faesser/Holz (Lager)",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        23,
+        25,
+        23,
+        29
+      ],
+      "pixel_rect": [
+        368,
+        400,
+        16,
+        80
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 5,
+      "asset": "sprites/lager_kisten.png"
+    },
+    {
+      "key": "lager_kistenstapel",
+      "label": "Holz-/Kistenstapel",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        20,
+        0,
+        23,
+        5
+      ],
+      "pixel_rect": [
+        320,
+        0,
+        64,
+        96
+      ],
+      "tiles_wide": 4,
+      "tiles_high": 6,
+      "asset": "sprites/lager_kistenstapel.png"
+    },
+    {
+      "key": "faesser_gestapelt",
+      "label": "Faesser gestapelt",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        16,
+        4,
+        18,
+        6
+      ],
+      "pixel_rect": [
+        256,
+        64,
+        48,
+        48
+      ],
+      "tiles_wide": 3,
+      "tiles_high": 3,
+      "asset": "sprites/faesser_gestapelt.png"
+    },
+    {
+      "key": "saecke",
+      "label": "Saecke/Getreide",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        15,
+        4,
+        15,
+        5
+      ],
+      "pixel_rect": [
+        240,
+        64,
+        16,
+        32
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 2,
+      "asset": "sprites/saecke.png"
+    },
+    {
+      "key": "marktstand_offen",
+      "label": "Marktstand offen",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        10,
+        9,
+        11,
+        10
+      ],
+      "pixel_rect": [
+        160,
+        144,
+        32,
+        32
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 2,
+      "asset": "sprites/marktstand_offen.png"
+    },
+    {
+      "key": "marktstand_offen2",
+      "label": "Marktstand offen 2",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        10,
+        12,
+        11,
+        12
+      ],
+      "pixel_rect": [
+        160,
+        192,
+        32,
+        16
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 1,
+      "asset": "sprites/marktstand_offen2.png"
+    },
+    {
+      "key": "marktstand_streifen",
+      "label": "Marktstand gestreift",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        7,
+        11,
+        7,
+        11
+      ],
+      "pixel_rect": [
+        112,
+        176,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/marktstand_streifen.png"
+    },
+    {
+      "key": "marktstand_klein",
+      "label": "Marktstand klein",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        3,
+        11,
+        3,
+        11
+      ],
+      "pixel_rect": [
+        48,
+        176,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/marktstand_klein.png"
+    },
+    {
+      "key": "zelt_streifen",
+      "label": "Marktzelt gestreift",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        19,
+        15,
+        19,
+        16
+      ],
+      "pixel_rect": [
+        304,
+        240,
+        16,
+        32
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 2,
+      "asset": "sprites/zelt_streifen.png"
+    },
+    {
+      "key": "gemuese_tomaten",
+      "label": "Gemuese (Tomaten/Paprika)",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        8,
+        12,
+        8,
+        12
+      ],
+      "pixel_rect": [
+        128,
+        192,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/gemuese_tomaten.png"
+    },
+    {
+      "key": "gemuese_moehren",
+      "label": "Moehren",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        9,
+        12,
+        9,
+        12
+      ],
+      "pixel_rect": [
+        144,
+        192,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/gemuese_moehren.png"
+    },
+    {
+      "key": "geldspeicher_turm",
+      "label": "Geldspeicher (Steinturm)",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        38,
+        33,
+        38,
+        36
+      ],
+      "pixel_rect": [
+        608,
+        528,
+        16,
+        64
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 4,
+      "asset": "sprites/geldspeicher_turm.png"
+    },
+    {
+      "key": "geldspeicher_alt_wachturm",
+      "label": "Geldspeicher ALT (Wachturm)",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        18,
+        8,
+        18,
+        15
+      ],
+      "pixel_rect": [
+        288,
+        128,
+        16,
+        128
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 8,
+      "asset": "sprites/geldspeicher_alt_wachturm.png"
+    },
+    {
+      "key": "baum_eiche_gross",
+      "label": "Eiche gross",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        21,
+        21,
+        22,
+        23
+      ],
+      "pixel_rect": [
+        336,
+        336,
+        32,
+        48
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 3,
+      "asset": "sprites/baum_eiche_gross.png"
+    },
+    {
+      "key": "baum_kiefer",
+      "label": "Kiefer/Nadelbaum",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        21,
+        18,
+        22,
+        20
+      ],
+      "pixel_rect": [
+        336,
+        288,
+        32,
+        48
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 3,
+      "asset": "sprites/baum_kiefer.png"
+    },
+    {
+      "key": "baum_farm",
+      "label": "Baum (Farmlands)",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        15,
+        7,
+        16,
+        8
+      ],
+      "pixel_rect": [
+        240,
+        112,
+        32,
+        32
+      ],
+      "tiles_wide": 2,
+      "tiles_high": 2,
+      "asset": "sprites/baum_farm.png"
+    },
+    {
+      "key": "baum_vik",
+      "label": "Baum (Vikings)",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        21,
+        11,
+        21,
+        12
+      ],
+      "pixel_rect": [
+        336,
+        176,
+        16,
+        32
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 2,
+      "asset": "sprites/baum_vik.png"
+    },
+    {
+      "key": "busch_hecke",
+      "label": "Hecke/Busch",
+      "sheet": "farm",
+      "source_file": "Farmlands.png",
+      "tile_box": [
+        12,
+        11,
+        14,
+        11
+      ],
+      "pixel_rect": [
+        192,
+        176,
+        48,
+        16
+      ],
+      "tiles_wide": 3,
+      "tiles_high": 1,
+      "asset": "sprites/busch_hecke.png"
+    },
+    {
+      "key": "brunnen",
+      "label": "Brunnen",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        4,
+        23,
+        4,
+        24
+      ],
+      "pixel_rect": [
+        64,
+        368,
+        16,
+        32
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 2,
+      "asset": "sprites/brunnen.png"
+    },
+    {
+      "key": "seerosen",
+      "label": "Seerosen/Wasserpflanzen",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        0,
+        23,
+        2,
+        25
+      ],
+      "pixel_rect": [
+        0,
+        368,
+        48,
+        48
+      ],
+      "tiles_wide": 3,
+      "tiles_high": 3,
+      "asset": "sprites/seerosen.png"
+    },
+    {
+      "key": "palisade",
+      "label": "Palisade/Holzzaun",
+      "sheet": "vik",
+      "source_file": "Vikings.png",
+      "tile_box": [
+        15,
+        0,
+        18,
+        1
+      ],
+      "pixel_rect": [
+        240,
+        0,
+        64,
+        32
+      ],
+      "tiles_wide": 4,
+      "tiles_high": 2,
+      "asset": "sprites/palisade.png"
+    },
+    {
+      "key": "haus_blau",
+      "label": "Haus blaues Dach",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        24,
+        31,
+        24,
+        31
+      ],
+      "pixel_rect": [
+        384,
+        496,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/haus_blau.png"
+    },
+    {
+      "key": "haus_rot",
+      "label": "Haus rotes Dach",
+      "sheet": "base",
+      "source_file": "BaseSet.png",
+      "tile_box": [
+        27,
+        33,
+        27,
+        33
+      ],
+      "pixel_rect": [
+        432,
+        528,
+        16,
+        16
+      ],
+      "tiles_wide": 1,
+      "tiles_high": 1,
+      "asset": "sprites/haus_rot.png"
+    }
+  ]
+}

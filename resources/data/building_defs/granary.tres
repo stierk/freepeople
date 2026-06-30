@@ -6,8 +6,9 @@
 script = ExtResource("1")
 type = 1
 display_name = "Granary"
-footprint_size = Vector2i(2, 2)
-sprite_atlas_region = Rect2i(731, 187, 16, 16)
+footprint_size = Vector2i(1, 2)
+sprite_sheet = "farm"
+sprite_atlas_region = Rect2i(240, 64, 16, 32)
 max_capacity = 2
 build_time_seconds = 0.0
 is_player_placeable = true
@@ -17,5 +18,7 @@ build_cost = {
 2: 10.0
 }
 storage_capacity = {
-3: 1000.0
+3: 1000.0,
+4: 1000.0,
+5: 1000.0
 }

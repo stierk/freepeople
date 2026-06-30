@@ -71,7 +71,9 @@ func _serialize_tiles() -> Array:
 	result.resize(WorldGrid.tiles.size())
 	for i in range(WorldGrid.tiles.size()):
 		var tile: TileRuntimeData = WorldGrid.tiles[i]
-		result[i] = [tile.terrain, tile.path_type, tile.wear, tile.resource_amount]
+		# M19: Weizen-Felder (Stufe, Timer, Besitzer) mitspeichern.
+		result[i] = [tile.terrain, tile.path_type, tile.wear, tile.resource_amount,
+			tile.crop_stage, tile.crop_timer, tile.crop_field_owner]
 	return result
 
 
@@ -194,8 +196,14 @@ func _deserialize_tiles(tiles_data: Array) -> void:
 		tile.path_type = entry[1] as TileRuntimeData.PathType
 		tile.wear = entry[2]
 		tile.resource_amount = entry[3]
+		# M19: Weizen-Felder (abwärtskompatibel zu alten Spielständen ohne diese Felder).
+		if entry.size() > 6:
+			tile.crop_stage = entry[4] as TileRuntimeData.CropStage
+			tile.crop_timer = entry[5]
+			tile.crop_field_owner = int(entry[6])
 		tiles[i] = tile
 	WorldGrid.tiles = tiles
+	WorldGrid.rebuild_crop_cells()
 
 
 func _deserialize_building(entry: Dictionary) -> BuildingInstance:

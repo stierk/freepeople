@@ -7,6 +7,8 @@ const PROFESSION_TO_BUILDING_TYPE := {
 	InhabitantData.Profession.SAWMILL_WORKER: BuildingDef.BuildingType.SAWMILL_HUT,
 	InhabitantData.Profession.QUARRY_WORKER: BuildingDef.BuildingType.QUARRY_HUT,
 	InhabitantData.Profession.FARMER: BuildingDef.BuildingType.FARMER_HUT,
+	InhabitantData.Profession.MILLER: BuildingDef.BuildingType.WINDMILL,
+	InhabitantData.Profession.BAKER: BuildingDef.BuildingType.BAKERY,
 }
 
 ## M14/M17: Gebäudetypen, die spielerseitig editierbare An-/Verkaufspreise und einen
@@ -27,6 +29,8 @@ const BUILDING_DEF_PATHS := {
 	BuildingDef.BuildingType.QUARRY_HUT: "res://resources/data/building_defs/quarry_hut.tres",
 	BuildingDef.BuildingType.FARMER_HUT: "res://resources/data/building_defs/farmer_hut.tres",
 	BuildingDef.BuildingType.TOWN_HALL: "res://resources/data/building_defs/town_hall.tres",
+	BuildingDef.BuildingType.WINDMILL: "res://resources/data/building_defs/windmill.tres",
+	BuildingDef.BuildingType.BAKERY: "res://resources/data/building_defs/bakery.tres",
 }
 
 var buildings: Array[BuildingInstance] = []
@@ -115,7 +119,8 @@ func get_treasury() -> BuildingInstance:
 ## M13/M14: liefert das Lagergebäude, das für ein bestimmtes Gut zuständig ist
 ## (Nahrung -> Kornspeicher, alles andere -> Lagerplatz; jeweils mit Rathaus-Fallback).
 func get_storage_for_good(good: int) -> BuildingInstance:
-	if good == Goods.GoodType.FOOD:
+	# Nahrungskette (Getreide, Mehl, fertige Nahrung) wird im Kornspeicher gelagert.
+	if good == Goods.GoodType.FOOD or good == Goods.GoodType.GRAIN or good == Goods.GoodType.FLOUR:
 		return get_granary()
 	return get_storage_yard()
 

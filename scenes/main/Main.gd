@@ -51,6 +51,8 @@ func _try_place_building(def: BuildingDef, cell: Vector2i) -> bool:
 
 ## M13: prüft sowohl Gold- als auch Güterkosten (build_cost), bevor bezahlt wird.
 func _can_afford_build_cost(def: BuildingDef) -> bool:
+	if _is_first_of_type(def.type):
+		return true
 	if GlobalInventory.gold < def.build_cost_gold:
 		return false
 	for good: int in def.build_cost.keys():
@@ -62,8 +64,15 @@ func _can_afford_build_cost(def: BuildingDef) -> bool:
 
 
 func _pay_build_cost(def: BuildingDef) -> void:
+	if _is_first_of_type(def.type):
+		return
 	GlobalInventory.spend_gold(def.build_cost_gold)
 	for good: int in def.build_cost.keys():
 		var amount: float = def.build_cost[good]
 		var building := BuildingManager.get_storage_for_good(good)
 		building.withdraw_community(good, amount)
+
+
+func _is_first_of_type(type: BuildingDef.BuildingType) -> bool:
+	return type in BuildingManager.TRADE_BUILDING_TYPES \
+		and BuildingManager.get_buildings_by_type(type).is_empty()

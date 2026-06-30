@@ -55,7 +55,7 @@ func _refresh_resources() -> void:
 	wood_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.WOOD], int(GlobalInventory.get_community_total(Goods.GoodType.WOOD))]
 	planks_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.PLANKS], int(GlobalInventory.get_community_total(Goods.GoodType.PLANKS))]
 	stone_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.STONE], int(GlobalInventory.get_community_total(Goods.GoodType.STONE))]
-	food_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.FOOD], int(GlobalInventory.get_food())]
+	food_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.FOOD], int(GlobalInventory.get_community_total(Goods.GoodType.FOOD))]
 
 
 func _on_population_changed(new_count: int) -> void:

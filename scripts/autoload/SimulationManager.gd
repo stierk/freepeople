@@ -18,11 +18,45 @@ const RESOURCE_REGEN_INTERVAL := 5.0
 const RESOURCE_REGEN_AMOUNT := 0.05
 const RESOURCE_REGEN_CHANCE := 0.3
 
+# --- Baum-Nachwachsen (zufällig, exponentiell mit Anzahl benachbarter Bäume) ---
+## Grundchance pro Regen-Tick, dass auf einer freien Graszelle spontan ein Baum
+## wächst (nahe 0, aber nicht 0). Pro benachbartem Baum steigt die Chance um den
+## Faktor TREE_SPREAD_GROWTH (exponentiell), gedeckelt bei TREE_SPREAD_MAX_CHANCE.
+## Auf belegten Zellen (Gebäude, Weg, Weizen, Ackerland) ist die Chance 0.
+const TREE_SPREAD_BASE_CHANCE := 0.0001
+const TREE_SPREAD_GROWTH := 3.0
+const TREE_SPREAD_MAX_CHANCE := 0.25
+
 # --- Debug-Logging ---
 const DEBUG_LOG_INTERVAL := 15.0
 
 # --- M17/M18: Tageslänge (1 Tag = 60s Echtzeit bei normaler Geschwindigkeit) ---
 const DAY_LENGTH_SECONDS := 60.0
+
+# --- Ressourcenabbau vor Ort (Holzfäller/Steinmetz) ---
+## Einen Baum fällen dauert einen halben Tag; daraus entstehen 8 Holz (= 8 Bretter
+## im Sägewerk). Der gefällte Baum verschwindet und kann später nachwachsen.
+const WOOD_CUT_TIME := DAY_LENGTH_SECONDS * 0.5
+const WOOD_PER_TREE := 8.0
+## Stein abbauen dauert ein Viertel Tag; der Felsen bleibt bestehen und erholt sich.
+const STONE_MINE_TIME := DAY_LENGTH_SECONDS * 0.25
+const STONE_PER_MINE := 4.0
+const STONE_DEPLETION_PER_MINE := 0.34
+
+# --- M19: Weizen / Ackerbau ---
+## Radius (in Zellen) rund um eine Bauernhütte, der als Ackerland gilt.
+const FARM_FIELD_RADIUS := 3
+## Sekunden pro Wachstumsstufe (STAGE_1 → STAGE_2 → STAGE_3). 1 Tag pro Stufe
+## (= DAY_LENGTH_SECONDS), also ~3 Tage bis erntereif.
+const CROP_GROW_INTERVAL := 60.0
+## Reifer Weizen (STAGE_3), der einen ganzen Tag nicht geerntet wird, verdorrt.
+const CROP_RIPE_LIFETIME := DAY_LENGTH_SECONDS
+## Verdorrter Weizen verschwindet nach einem weiteren Tag.
+const CROP_DEAD_LIFETIME := DAY_LENGTH_SECONDS
+## Weizen wird im Sekundentakt aktualisiert (nicht jeden Frame).
+const CROP_UPDATE_INTERVAL := 1.0
+## Erntemenge an Nahrung pro reifem Feld.
+const CROP_HARVEST_YIELD := 1.0
 
 # --- M8/M18: Markt + Nahrung + Bevölkerung ---
 ## M18: 1 Nahrung pro Bewohner und Mahlzeit; 3 Mahlzeiten pro Tag (DAY_LENGTH_SECONDS/3).
@@ -56,7 +90,17 @@ const PROFESSION_TO_GOOD := {
 	InhabitantData.Profession.WOODCUTTER: Goods.GoodType.WOOD,
 	InhabitantData.Profession.SAWMILL_WORKER: Goods.GoodType.PLANKS,
 	InhabitantData.Profession.QUARRY_WORKER: Goods.GoodType.STONE,
-	InhabitantData.Profession.FARMER: Goods.GoodType.FOOD,
+	InhabitantData.Profession.FARMER: Goods.GoodType.GRAIN,
+	InhabitantData.Profession.MILLER: Goods.GoodType.FLOUR,
+	InhabitantData.Profession.BAKER: Goods.GoodType.FOOD,
+}
+
+## Welcher Geländetyp von welchem Beruf vor Ort abgebaut wird (Holzfäller → Wald,
+## Steinmetz → Stein). Diese Berufe ernten nicht mehr passiv in der Hütte, sondern
+## laufen zur Ressource, bauen sie ab und tragen sie zur Hütte zurück.
+const PROFESSION_TO_TERRAIN := {
+	InhabitantData.Profession.WOODCUTTER: TileRuntimeData.TerrainType.FOREST,
+	InhabitantData.Profession.QUARRY_WORKER: TileRuntimeData.TerrainType.STONE,
 }
 
 var speed_mode: SpeedMode = SpeedMode.NORMAL
@@ -69,6 +113,7 @@ var _pop_growth_accum: float = 0.0
 var _tithe_accum: float = 0.0
 var _market_price_accum: float = 0.0
 var _daily_tax_accum: float = 0.0
+var _crop_accum: float = 0.0
 
 
 func _process(delta: float) -> void:
@@ -86,10 +131,16 @@ func _process(delta: float) -> void:
 	for inhabitant in GameState.inhabitants:
 		_process_inhabitant_state(inhabitant, sim_delta)
 
+	_crop_accum += sim_delta
+	if _crop_accum >= CROP_UPDATE_INTERVAL:
+		_update_crops(_crop_accum)
+		_crop_accum = 0.0
+
 	_resource_regen_accum += sim_delta
 	if _resource_regen_accum >= RESOURCE_REGEN_INTERVAL:
 		_resource_regen_accum -= RESOURCE_REGEN_INTERVAL
 		_regenerate_resources()
+		_spread_trees()
 
 	_food_consumption_accum += sim_delta
 	if _food_consumption_accum >= FOOD_CONSUMPTION_INTERVAL:
@@ -130,11 +181,15 @@ func _process_buildings(delta: float) -> void:
 		if not building.is_constructed:
 			continue
 		var def := building.def
+		# Holzfäller- und Steinmetzhütten produzieren nicht mehr passiv – ihre
+		# Bewohner bauen Holz/Stein vor Ort ab (siehe _handle_gatherer_working).
+		if def.type == BuildingDef.BuildingType.WOODCUTTER_HUT or def.type == BuildingDef.BuildingType.QUARRY_HUT:
+			continue
 		if def.output_interval <= 0.0 or def.output_good < 0:
 			continue
 
 		if def.input_good >= 0:
-			var storage := BuildingManager.get_storage_yard()
+			var storage := BuildingManager.get_storage_for_good(def.input_good)
 			if storage == null:
 				continue
 			if storage.community_stock.get(def.input_good, 0.0) < def.input_amount:
@@ -154,7 +209,7 @@ func _process_buildings(delta: float) -> void:
 		building.production_timer = def.output_interval
 
 		if def.input_good >= 0:
-			var storage := BuildingManager.get_storage_yard()
+			var storage := BuildingManager.get_storage_for_good(def.input_good)
 			storage.withdraw_community(def.input_good, def.input_amount)
 
 		if terrain_cell != Vector2i(-1, -1):
@@ -316,17 +371,18 @@ func _process_market_trade(md: MarketData, storage: BuildingInstance, granary: B
 	if revenue <= 0.0:
 		return
 
-	var food_budget := revenue * MARKET_FOOD_IMPORT_SHARE
-	GlobalInventory.add_gold(revenue - food_budget)
+	GlobalInventory.add_gold(revenue)
 
 	if granary != null:
 		var food_price: float = BuildingManager.get_buy_price(Goods.GoodType.FOOD)
-		var food_amount: float = food_budget / food_price
-		granary.community_stock[Goods.GoodType.FOOD] = granary.community_stock.get(Goods.GoodType.FOOD, 0.0) + food_amount
-		md.record_purchase(Goods.GoodType.FOOD, food_amount)
-		print("[M8:Markt] Waren fuer %.1f Gold verkauft, %.1f Nahrung importiert." % [revenue - food_budget, food_amount])
-	else:
-		GlobalInventory.add_gold(food_budget)
+		if food_price > 0.0:
+			var food_budget := minf(revenue * MARKET_FOOD_IMPORT_SHARE, GlobalInventory.gold)
+			if food_budget > 0.0:
+				GlobalInventory.spend_gold(food_budget)
+				var food_amount: float = food_budget / food_price
+				granary.community_stock[Goods.GoodType.FOOD] = granary.community_stock.get(Goods.GoodType.FOOD, 0.0) + food_amount
+				md.record_purchase(Goods.GoodType.FOOD, food_amount)
+				print("[M8:Markt] +%.1f Gold Warenverkauf, -%.1f Gold fuer %.1f Nahrung." % [revenue, food_budget, food_amount])
 
 	GlobalInventory.notify_resources_changed()
 
@@ -335,10 +391,10 @@ func _process_market_trade(md: MarketData, storage: BuildingInstance, granary: B
 # M8: Marktbesuch starten
 # ---------------------------------------------------------------------------
 func _start_market_trip(inhabitant: InhabitantData) -> void:
-	var market := BuildingManager.get_market()
-	if market == null:
+	var destination := BuildingManager.get_granary()
+	if destination == null:
 		return
-	inhabitant.path = WorldGrid.find_path(inhabitant.cell, market.cell)
+	inhabitant.path = WorldGrid.find_path(inhabitant.cell, destination.cell)
 	inhabitant.path_index = 0
 	inhabitant.state = InhabitantData.State.MARKET_TRIP
 
@@ -379,6 +435,8 @@ func _process_inhabitant_state(inhabitant: InhabitantData, delta: float) -> void
 			_handle_seeking_site(inhabitant)
 		InhabitantData.State.MOVING_TO_BUILD:
 			_handle_moving_to_build(inhabitant)
+		InhabitantData.State.FETCHING_MATERIALS:
+			_handle_fetching_materials(inhabitant)
 		InhabitantData.State.BUILDING:
 			_handle_building(inhabitant, delta)
 		InhabitantData.State.WORKING:
@@ -389,6 +447,12 @@ func _process_inhabitant_state(inhabitant: InhabitantData, delta: float) -> void
 			_handle_returning(inhabitant)
 		InhabitantData.State.MARKET_TRIP:
 			_handle_market_trip(inhabitant)
+		InhabitantData.State.FARM_TENDING:
+			_handle_farm_tending(inhabitant)
+		InhabitantData.State.GATHERING:
+			_handle_gathering(inhabitant, delta)
+		InhabitantData.State.HAULING_HOME:
+			_handle_hauling_home(inhabitant)
 		_:
 			pass
 
@@ -452,26 +516,60 @@ func _handle_moving_to_build(inhabitant: InhabitantData) -> void:
 	WorldGrid.set_building_footprint_rect(hut.cell, def.footprint_size, hut.id, true)
 	hut.construction_timer = def.build_time_seconds
 	hut.production_timer = def.output_interval
-	_pay_hut_build_cost(def, inhabitant)
-	inhabitant.state = InhabitantData.State.BUILDING
+	if def.build_cost.is_empty():
+		inhabitant.state = InhabitantData.State.BUILDING
+	else:
+		hut.pending_build_cost = def.build_cost.duplicate()
+		inhabitant.fetch_target_good = -1
+		inhabitant.state = InhabitantData.State.FETCHING_MATERIALS
 
 
-## M14: zieht die Baukosten der Hütte aus dem zuständigen Gemeinschaftslager
-## (mit Rathaus-Fallback) ab. Reicht der Lagerbestand nicht, zahlt der Bewohner
-## den fehlenden Anteil zum aktuellen Einkaufspreis aus eigenem Gold zu.
-func _pay_hut_build_cost(def: BuildingDef, inhabitant: InhabitantData) -> void:
-	for good: int in def.build_cost.keys():
-		var needed: float = def.build_cost[good]
-		if needed <= 0.0:
-			continue
-		var storage := BuildingManager.get_storage_for_good(good)
-		var taken := storage.withdraw_community(good, needed) if storage != null else 0.0
-		var missing := needed - taken
-		if missing <= 0.0:
-			continue
-		var price := BuildingManager.get_buy_price(good)
-		var cost := missing * price
-		inhabitant.gold = maxf(0.0, inhabitant.gold - cost)
+# ---------------------------------------------------------------------------
+# FETCHING_MATERIALS – holt 1 Einheit Baumaterial pro Trip vom Lager zur Baustelle
+# ---------------------------------------------------------------------------
+func _handle_fetching_materials(inhabitant: InhabitantData) -> void:
+	if not inhabitant.path.is_empty() and inhabitant.path_index < inhabitant.path.size():
+		return
+
+	var hut := BuildingManager.get_building(inhabitant.home_building_id)
+	if hut == null:
+		inhabitant.state = InhabitantData.State.SEEKING_SITE
+		return
+
+	var good := inhabitant.fetch_target_good
+	if good >= 0:
+		var carried: float = inhabitant.inventory.get(good, 0.0)
+		if carried <= 0.0:
+			# Arrived at storage – pick up exactly 1 unit
+			var storage := BuildingManager.get_storage_for_good(good)
+			if storage != null:
+				var taken := storage.withdraw_community(good, 1.0)
+				if taken > 0.0:
+					inhabitant.inventory[good] = taken
+					inhabitant.path = WorldGrid.find_path(inhabitant.cell, hut.cell)
+					inhabitant.path_index = 0
+		else:
+			# Arrived at build site – deposit
+			var needed: float = hut.pending_build_cost.get(good, 0.0)
+			hut.pending_build_cost[good] = maxf(0.0, needed - carried)
+			if hut.pending_build_cost[good] <= 0.0:
+				hut.pending_build_cost.erase(good)
+			inhabitant.inventory.erase(good)
+			inhabitant.fetch_target_good = -1
+		return
+
+	if hut.pending_build_cost.is_empty():
+		inhabitant.state = InhabitantData.State.BUILDING
+		return
+
+	# Choose next needed material and walk to the responsible storage
+	good = hut.pending_build_cost.keys()[0]
+	var storage := BuildingManager.get_storage_for_good(good)
+	if storage == null:
+		return
+	inhabitant.fetch_target_good = good
+	inhabitant.path = WorldGrid.find_path(inhabitant.cell, storage.cell)
+	inhabitant.path_index = 0
 
 
 func _handle_building(inhabitant: InhabitantData, delta: float) -> void:
@@ -480,10 +578,16 @@ func _handle_building(inhabitant: InhabitantData, delta: float) -> void:
 		inhabitant.state = InhabitantData.State.WORKING
 		return
 
+	if not hut.pending_build_cost.is_empty():
+		return  # wait for fetcher to deliver all materials
+
 	hut.construction_timer -= delta
 	if hut.construction_timer <= 0.0:
 		hut.is_constructed = true
 		BuildingManager.building_constructed.emit(hut.id)
+		# M19: fertige Bauernhütte erhält ringsum Ackerland.
+		if hut.def.type == BuildingDef.BuildingType.FARMER_HUT:
+			WorldGrid.designate_farm_field(hut.cell, hut.def.footprint_size, hut.id, FARM_FIELD_RADIUS)
 		print("[M7:Bau] %s fertig gebaut (ID=%d)" % [hut.def.display_name, hut.id])
 		inhabitant.state = InhabitantData.State.WORKING
 
@@ -491,6 +595,15 @@ func _handle_building(inhabitant: InhabitantData, delta: float) -> void:
 func _handle_working(inhabitant: InhabitantData) -> void:
 	var hut := BuildingManager.get_building(inhabitant.home_building_id)
 	if hut == null:
+		return
+	# M19: Bauern arbeiten nicht passiv in der Hütte, sondern pflanzen und ernten
+	# Weizen auf den umliegenden Feldern.
+	if inhabitant.profession == InhabitantData.Profession.FARMER:
+		_handle_farmer_working(inhabitant, hut)
+		return
+	# Holzfäller/Steinmetz: zur Ressource laufen, vor Ort abbauen, zur Hütte tragen.
+	if PROFESSION_TO_TERRAIN.has(inhabitant.profession):
+		_handle_gatherer_working(inhabitant, hut)
 		return
 	var def := hut.def
 	if def.output_good < 0:
@@ -520,7 +633,12 @@ func _handle_delivering(inhabitant: InhabitantData) -> void:
 	target.deliver(good, amount)
 	inhabitant.inventory[good] = 0.0
 
-	print("[M7:Lieferung] Bewohner %d bringt %.1f %s" % [inhabitant.id, amount, Goods.GoodType.keys()[good]])
+	var wage := minf(amount * BuildingManager.get_sell_price(good), GlobalInventory.gold)
+	if wage > 0.0:
+		GlobalInventory.spend_gold(wage)
+		inhabitant.gold += wage
+
+	print("[M7:Lieferung] Bewohner %d bringt %.1f %s, erhaelt %.2f Gold" % [inhabitant.id, amount, Goods.GoodType.keys()[good], wage])
 
 	var hut := BuildingManager.get_building(inhabitant.home_building_id)
 	inhabitant.path = WorldGrid.find_path(inhabitant.cell, hut.cell)
@@ -544,8 +662,16 @@ func _handle_market_trip(inhabitant: InhabitantData) -> void:
 	var granary := BuildingManager.get_granary()
 	if granary != null:
 		var available: float = granary.community_stock.get(Goods.GoodType.FOOD, 0.0)
-		var taken := minf(available, FOOD_PER_MARKET_VISIT)
+		var sell_price: float = BuildingManager.get_sell_price(Goods.GoodType.FOOD)
+		var max_affordable: float = FOOD_PER_MARKET_VISIT
+		if sell_price > 0.0:
+			max_affordable = minf(FOOD_PER_MARKET_VISIT, inhabitant.gold / sell_price)
+		var taken := minf(available, max_affordable)
 		granary.community_stock[Goods.GoodType.FOOD] = available - taken
+		var cost := taken * sell_price
+		inhabitant.gold -= cost
+		if cost > 0.0:
+			GlobalInventory.add_gold(cost)
 		if FOOD_PER_MARKET_VISIT > 0.0:
 			inhabitant.hunger = maxf(0.0, inhabitant.hunger - (taken / FOOD_PER_MARKET_VISIT) * HUNGER_MARKET_THRESHOLD)
 		GlobalInventory.notify_resources_changed()
@@ -558,12 +684,236 @@ func _handle_market_trip(inhabitant: InhabitantData) -> void:
 
 
 # ---------------------------------------------------------------------------
+# M19: Ackerbau – Bauer pflanzt und erntet Weizen auf den Feldern um seine Hütte
+# ---------------------------------------------------------------------------
+func _handle_farmer_working(inhabitant: InhabitantData, hut: BuildingInstance) -> void:
+	var carried: float = inhabitant.inventory.get(Goods.GoodType.GRAIN, 0.0)
+	var deliver_threshold: float = maxf(hut.def.carry_capacity, 1.0)
+	var task := _find_farm_task(hut)
+
+	# Geerntete Nahrung zum Kornspeicher bringen, sobald die Tragelast voll ist
+	# oder es vorerst nichts mehr auf den Feldern zu tun gibt.
+	if carried >= deliver_threshold or (task.is_empty() and carried > 0.0):
+		var granary := BuildingManager.get_granary()
+		if granary == null:
+			return
+		inhabitant.path = WorldGrid.find_path(inhabitant.cell, granary.cell)
+		inhabitant.path_index = 0
+		inhabitant.state = InhabitantData.State.DELIVERING
+		return
+
+	if task.is_empty():
+		return  # nichts zu tun – im nächsten Tick erneut prüfen
+
+	inhabitant.farm_target_cell = task["cell"]
+	inhabitant.farm_action = task["action"]
+	inhabitant.path = WorldGrid.find_path(inhabitant.cell, task["cell"])
+	inhabitant.path_index = 0
+	inhabitant.state = InhabitantData.State.FARM_TENDING
+
+
+## Sucht die nächste Tätigkeit auf den Feldern der Hütte: zuerst reifen Weizen
+## ernten, sonst ein freies Feld bepflanzen. Liefert {} wenn nichts ansteht.
+func _find_farm_task(hut: BuildingInstance) -> Dictionary:
+	var size := hut.def.footprint_size
+	var center := Vector2(hut.cell) + Vector2(size) * 0.5
+	var best_harvest := Vector2i(-1, -1)
+	var best_harvest_dist := INF
+	var best_plant := Vector2i(-1, -1)
+	var best_plant_dist := INF
+
+	var min_x := hut.cell.x - FARM_FIELD_RADIUS
+	var max_x := hut.cell.x + size.x - 1 + FARM_FIELD_RADIUS
+	var min_y := hut.cell.y - FARM_FIELD_RADIUS
+	var max_y := hut.cell.y + size.y - 1 + FARM_FIELD_RADIUS
+	for y in range(min_y, max_y + 1):
+		for x in range(min_x, max_x + 1):
+			var cell := Vector2i(x, y)
+			if not WorldGrid.is_valid_cell(cell):
+				continue
+			var tile := WorldGrid.get_tile(cell)
+			if tile.crop_field_owner != hut.id:
+				continue
+			var dist: float = (Vector2(cell) - center).length_squared()
+			if tile.crop_stage == TileRuntimeData.CropStage.STAGE_3:
+				if dist < best_harvest_dist:
+					best_harvest_dist = dist
+					best_harvest = cell
+			elif tile.crop_stage == TileRuntimeData.CropStage.NONE and WorldGrid.is_plantable(cell):
+				if dist < best_plant_dist:
+					best_plant_dist = dist
+					best_plant = cell
+
+	if best_harvest != Vector2i(-1, -1):
+		return {"action": InhabitantData.FarmAction.HARVEST, "cell": best_harvest}
+	if best_plant != Vector2i(-1, -1):
+		return {"action": InhabitantData.FarmAction.PLANT, "cell": best_plant}
+	return {}
+
+
+func _handle_farm_tending(inhabitant: InhabitantData) -> void:
+	if not inhabitant.path.is_empty() and inhabitant.path_index < inhabitant.path.size():
+		return  # noch unterwegs zum Feld
+
+	var hut := BuildingManager.get_building(inhabitant.home_building_id)
+	var cell := inhabitant.farm_target_cell
+	# Nur handeln, wenn der Bauer tatsächlich auf dem Zielfeld steht.
+	if hut != null and inhabitant.cell == cell and WorldGrid.is_valid_cell(cell):
+		var tile := WorldGrid.get_tile(cell)
+		match inhabitant.farm_action:
+			InhabitantData.FarmAction.HARVEST:
+				if tile.crop_stage == TileRuntimeData.CropStage.STAGE_3:
+					WorldGrid.clear_crop(cell)
+					inhabitant.inventory[Goods.GoodType.GRAIN] = \
+						inhabitant.inventory.get(Goods.GoodType.GRAIN, 0.0) + CROP_HARVEST_YIELD
+			InhabitantData.FarmAction.PLANT:
+				if tile.crop_field_owner == hut.id and WorldGrid.is_plantable(cell):
+					WorldGrid.plant_crop(cell, hut.id)
+
+	inhabitant.farm_target_cell = Vector2i(-1, -1)
+	inhabitant.farm_action = InhabitantData.FarmAction.NONE
+	inhabitant.state = InhabitantData.State.WORKING
+
+
+# ---------------------------------------------------------------------------
+# Ressourcenabbau vor Ort – Holzfäller/Steinmetz laufen zur Ressource, bauen sie
+# ab und tragen sie in die eigene Hütte (analog zum Bauern auf dem Feld).
+# ---------------------------------------------------------------------------
+func _handle_gatherer_working(inhabitant: InhabitantData, hut: BuildingInstance) -> void:
+	var good: int = PROFESSION_TO_GOOD[inhabitant.profession]
+	var terrain: TileRuntimeData.TerrainType = PROFESSION_TO_TERRAIN[inhabitant.profession]
+	var stored: float = hut.output_stock.get(good, 0.0)
+	var resource_cell := _find_resource_cell_near(hut.cell, terrain)
+
+	# Vorrat aus der Hütte zum Lager bringen, sobald eine volle Tragelast bereitliegt
+	# oder gerade keine Ressource mehr in Reichweite ist.
+	if stored > 0.0 and (stored >= hut.def.carry_capacity or resource_cell == Vector2i(-1, -1)):
+		var carry: float = minf(stored, hut.def.carry_capacity)
+		hut.output_stock[good] = stored - carry
+		inhabitant.inventory[good] = inhabitant.inventory.get(good, 0.0) + carry
+		var target := _get_delivery_target(inhabitant.profession)
+		inhabitant.path = WorldGrid.find_path(inhabitant.cell, target.cell)
+		inhabitant.path_index = 0
+		inhabitant.state = InhabitantData.State.DELIVERING
+		return
+
+	if resource_cell == Vector2i(-1, -1):
+		return  # nichts abzubauen – im nächsten Tick erneut prüfen
+
+	inhabitant.gather_target_cell = resource_cell
+	inhabitant.work_timer = WOOD_CUT_TIME if terrain == TileRuntimeData.TerrainType.FOREST else STONE_MINE_TIME
+	inhabitant.path = WorldGrid.find_path(inhabitant.cell, resource_cell)
+	inhabitant.path_index = 0
+	inhabitant.state = InhabitantData.State.GATHERING
+
+
+## Läuft zur Ressource und baut sie vor Ort ab. Nur wenn der Bewohner tatsächlich
+## auf der Zielzelle steht, läuft der Abbau-Timer; ohne Anwesenheit kein Ertrag.
+func _handle_gathering(inhabitant: InhabitantData, delta: float) -> void:
+	if not inhabitant.path.is_empty() and inhabitant.path_index < inhabitant.path.size():
+		return  # noch unterwegs zur Ressource
+
+	var hut := BuildingManager.get_building(inhabitant.home_building_id)
+	if hut == null:
+		inhabitant.state = InhabitantData.State.SEEKING_SITE
+		return
+
+	var cell := inhabitant.gather_target_cell
+	var terrain: TileRuntimeData.TerrainType = PROFESSION_TO_TERRAIN[inhabitant.profession]
+
+	# Abbruch, wenn der Bewohner die Ressource nicht erreicht hat oder sie inzwischen
+	# weg ist (von jemand anderem abgebaut).
+	if not WorldGrid.is_valid_cell(cell) or inhabitant.cell != cell:
+		_reset_gathering(inhabitant)
+		return
+	var tile := WorldGrid.get_tile(cell)
+	if tile.terrain != terrain or tile.resource_amount <= 0.0:
+		_reset_gathering(inhabitant)
+		return
+
+	# Vor Ort abbauen: Arbeitszeit herunterzählen.
+	inhabitant.work_timer -= delta
+	if inhabitant.work_timer > 0.0:
+		return
+
+	var good: int = PROFESSION_TO_GOOD[inhabitant.profession]
+	if terrain == TileRuntimeData.TerrainType.FOREST:
+		WorldGrid.remove_tree(cell)  # gefällter Baum verschwindet
+		inhabitant.inventory[good] = inhabitant.inventory.get(good, 0.0) + WOOD_PER_TREE
+	else:
+		tile.resource_amount = maxf(0.0, tile.resource_amount - STONE_DEPLETION_PER_MINE)
+		inhabitant.inventory[good] = inhabitant.inventory.get(good, 0.0) + STONE_PER_MINE
+
+	# Geerntete Ressource zur Hütte zurücktragen.
+	inhabitant.gather_target_cell = Vector2i(-1, -1)
+	inhabitant.path = WorldGrid.find_path(inhabitant.cell, hut.cell)
+	inhabitant.path_index = 0
+	inhabitant.state = InhabitantData.State.HAULING_HOME
+	GlobalInventory.notify_resources_changed()
+
+
+## Trägt die abgebaute Ressource in die eigene Hütte (Output-Puffer). Von dort wird
+## sie später als volle Ladung zum Lager geliefert (_handle_gatherer_working).
+func _handle_hauling_home(inhabitant: InhabitantData) -> void:
+	if not inhabitant.path.is_empty() and inhabitant.path_index < inhabitant.path.size():
+		return  # noch unterwegs zur Hütte
+
+	var hut := BuildingManager.get_building(inhabitant.home_building_id)
+	if hut == null:
+		inhabitant.state = InhabitantData.State.SEEKING_SITE
+		return
+
+	var good: int = PROFESSION_TO_GOOD[inhabitant.profession]
+	var carried: float = inhabitant.inventory.get(good, 0.0)
+	if carried > 0.0:
+		hut.output_stock[good] = hut.output_stock.get(good, 0.0) + carried
+		inhabitant.inventory[good] = 0.0
+	inhabitant.state = InhabitantData.State.WORKING
+
+
+func _reset_gathering(inhabitant: InhabitantData) -> void:
+	inhabitant.gather_target_cell = Vector2i(-1, -1)
+	inhabitant.work_timer = 0.0
+	inhabitant.state = InhabitantData.State.WORKING
+
+
+## Lässt allen Weizen wachsen, reifen Weizen verdorren und verdorrten verschwinden.
+func _update_crops(step: float) -> void:
+	var changed := false
+	for cell in WorldGrid.crop_cells.duplicate():
+		var tile := WorldGrid.get_tile(cell)
+		# Auf einem Weg kann kein Weizen wachsen – ein über das Feld gelegter Weg
+		# zertrampelt vorhandenen Weizen.
+		if tile.path_type != TileRuntimeData.PathType.NONE:
+			WorldGrid.clear_crop(cell)
+			changed = true
+			continue
+		tile.crop_timer += step
+		match tile.crop_stage:
+			TileRuntimeData.CropStage.STAGE_1:
+				if tile.crop_timer >= CROP_GROW_INTERVAL:
+					WorldGrid.set_crop_stage(cell, TileRuntimeData.CropStage.STAGE_2)
+			TileRuntimeData.CropStage.STAGE_2:
+				if tile.crop_timer >= CROP_GROW_INTERVAL:
+					WorldGrid.set_crop_stage(cell, TileRuntimeData.CropStage.STAGE_3)
+			TileRuntimeData.CropStage.STAGE_3:
+				if tile.crop_timer >= CROP_RIPE_LIFETIME:
+					WorldGrid.set_crop_stage(cell, TileRuntimeData.CropStage.DEAD)
+			TileRuntimeData.CropStage.DEAD:
+				if tile.crop_timer >= CROP_DEAD_LIFETIME:
+					WorldGrid.clear_crop(cell)
+					changed = true
+	if changed:
+		GlobalInventory.notify_resources_changed()
+
+
+# ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 func _get_delivery_target(profession: InhabitantData.Profession) -> BuildingInstance:
-	if profession == InhabitantData.Profession.FARMER:
-		return BuildingManager.get_granary()
-	return BuildingManager.get_storage_yard()
+	# Lieferziel richtet sich nach dem erzeugten Gut: Nahrungskette → Kornspeicher,
+	# Holz/Bretter/Stein → Lagerplatz.
+	return BuildingManager.get_storage_for_good(PROFESSION_TO_GOOD[profession])
 
 
 func _find_resource_cell_near(origin: Vector2i, terrain: TileRuntimeData.TerrainType) -> Vector2i:
@@ -599,6 +949,33 @@ func _regenerate_resources() -> void:
 				tile.resource_amount = minf(1.0, tile.resource_amount + RESOURCE_REGEN_AMOUNT)
 
 
+## Bäume wachsen zufällig nach. Auf belegten Zellen (Gebäude, Weg, Weizen,
+## Ackerland) ist die Chance 0, auf freiem Gras klein, aber nicht 0 – und sie
+## steigt exponentiell mit der Zahl benachbarter Bäume, sodass Wälder von den
+## Rändern her wieder zuwachsen. Neue Bäume werden erst nach dem Durchlauf gesetzt,
+## damit sich Nachbarn nicht innerhalb desselben Ticks aufschaukeln.
+func _spread_trees() -> void:
+	var grown: Array[Vector2i] = []
+	for y in range(WorldGrid.MAP_SIZE.y):
+		for x in range(WorldGrid.MAP_SIZE.x):
+			var cell := Vector2i(x, y)
+			var tile := WorldGrid.get_tile(cell)
+			if tile.terrain != TileRuntimeData.TerrainType.GRASS:
+				continue
+			if tile.building_id != -1 or tile.path_type != TileRuntimeData.PathType.NONE:
+				continue
+			if tile.crop_stage != TileRuntimeData.CropStage.NONE or tile.crop_field_owner != -1:
+				continue
+			var neighbors := WorldGrid.count_forest_neighbors(cell)
+			var chance: float = minf(
+				TREE_SPREAD_BASE_CHANCE * pow(TREE_SPREAD_GROWTH, neighbors),
+				TREE_SPREAD_MAX_CHANCE)
+			if randf() < chance:
+				grown.append(cell)
+	for cell in grown:
+		WorldGrid.grow_tree(cell)
+
+
 ## M18: aktueller Tag (1-basiert) für HUD-Anzeige und Highscore.
 func get_current_day() -> int:
 	return int(sim_time / DAY_LENGTH_SECONDS) + 1
@@ -615,6 +992,7 @@ func reset_state() -> void:
 	_tithe_accum = 0.0
 	_market_price_accum = 0.0
 	_daily_tax_accum = 0.0
+	_crop_accum = 0.0
 
 
 func _print_stock_summary() -> void:

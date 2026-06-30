@@ -1,6 +1,12 @@
 extends Node
 
 signal path_type_changed(cell: Vector2i)
+## M19: Feuert wenn sich der Weizenzustand einer Zelle ändert (Pflanzen, Wachsen,
+## Ernten, Verdorren) – World.gd zeichnet die betroffene Zelle neu.
+signal crop_changed(cell: Vector2i)
+## Feuert wenn sich der Geländetyp einer Zelle ändert (gefällter/nachgewachsener
+## Baum) – World.gd zeichnet die betroffene Zelle neu.
+signal terrain_changed(cell: Vector2i)
 
 const MAP_SIZE := Vector2i(64, 64)
 const TILE_SIZE := 16
@@ -13,13 +19,21 @@ const WEAR_PER_STEP := 1.0
 const WEAR_DECAY_PER_TICK := 0.02
 
 const NEIGHBOR_OFFSETS: Array[Vector2i] = [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]
+## M19: 8er-Nachbarschaft für Pflanz-Regeln (kein Weizen neben Gebäude/Weg).
+const NEIGHBOR_OFFSETS_8: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+]
 
 var tiles: Array = []
 var astar := AStarGrid2D.new()
+## M19: aktive Weizen-Zellen für effizientes Ticken (statt der ganzen Karte).
+var crop_cells: Array[Vector2i] = []
 
 
 func generate_terrain(world_seed: int) -> void:
 	tiles = NoiseTerrainGenerator.generate(MAP_SIZE, world_seed)
+	crop_cells.clear()
 
 
 func setup_astar() -> void:
@@ -100,6 +114,10 @@ func register_step(cell: Vector2i) -> void:
 	var tile := get_tile(cell)
 	if tile.path_type == TileRuntimeData.PathType.ROAD:
 		return
+	# M19: Ackerfelder werden nicht zertrampelt – ein Bauer macht keinen Weg quer
+	# durch sein eigenes Feld, sondern nur auf dem Weg zu anderen Gebäuden.
+	if tile.crop_field_owner != -1:
+		return
 	tile.wear += WEAR_PER_STEP
 	if tile.wear >= WEAR_THRESHOLD and tile.path_type == TileRuntimeData.PathType.NONE:
 		tile.path_type = TileRuntimeData.PathType.DESIRE_PATH
@@ -163,3 +181,131 @@ func cell_to_world(cell: Vector2i) -> Vector2:
 
 func _update_astar_weight(cell: Vector2i) -> void:
 	astar.set_point_weight_scale(cell, 1.0 / get_speed_multiplier(cell))
+
+
+# ---------------------------------------------------------------------------
+# M19: Weizen / Ackerbau
+# ---------------------------------------------------------------------------
+
+## Markiert begehbare Grasfelder rund um eine Bauernhütte als Ackerland dieser
+## Hütte (crop_field_owner = building_id). Felder dürfen nicht auf dem Footprint
+## und nicht direkt an einem Gebäude liegen.
+func designate_farm_field(origin: Vector2i, size: Vector2i, building_id: int, radius: int) -> void:
+	var min_x := origin.x - radius
+	var max_x := origin.x + size.x - 1 + radius
+	var min_y := origin.y - radius
+	var max_y := origin.y + size.y - 1 + radius
+	for y in range(min_y, max_y + 1):
+		for x in range(min_x, max_x + 1):
+			var cell := Vector2i(x, y)
+			if not is_valid_cell(cell):
+				continue
+			var tile := get_tile(cell)
+			if tile.terrain != TileRuntimeData.TerrainType.GRASS:
+				continue
+			if tile.building_id != -1 or tile.crop_field_owner != -1:
+				continue
+			if _has_adjacent_building(cell):
+				continue
+			tile.crop_field_owner = building_id
+
+
+## Darf auf dieser Zelle Weizen gepflanzt werden? Nur auf leerem Gras, nicht auf
+## einem Weg, nicht auf/neben einem Gebäude und nicht neben einem Weg.
+func is_plantable(cell: Vector2i) -> bool:
+	if not is_valid_cell(cell):
+		return false
+	var tile := get_tile(cell)
+	if tile.terrain != TileRuntimeData.TerrainType.GRASS:
+		return false
+	if tile.path_type != TileRuntimeData.PathType.NONE:
+		return false
+	if tile.building_id != -1:
+		return false
+	if tile.crop_stage != TileRuntimeData.CropStage.NONE:
+		return false
+	for dir in NEIGHBOR_OFFSETS_8:
+		var n := cell + dir
+		if not is_valid_cell(n):
+			continue
+		var ntile := get_tile(n)
+		if ntile.building_id != -1:
+			return false
+		if ntile.path_type != TileRuntimeData.PathType.NONE:
+			return false
+	return true
+
+
+func _has_adjacent_building(cell: Vector2i) -> bool:
+	for dir in NEIGHBOR_OFFSETS_8:
+		var n := cell + dir
+		if is_valid_cell(n) and get_tile(n).building_id != -1:
+			return true
+	return false
+
+
+func plant_crop(cell: Vector2i, owner_id: int) -> void:
+	var tile := get_tile(cell)
+	tile.crop_stage = TileRuntimeData.CropStage.STAGE_1
+	tile.crop_timer = 0.0
+	if tile.crop_field_owner == -1:
+		tile.crop_field_owner = owner_id
+	if not crop_cells.has(cell):
+		crop_cells.append(cell)
+	crop_changed.emit(cell)
+
+
+## Setzt eine Weizenzelle auf eine neue Stufe (Wachstum oder Verdorren).
+func set_crop_stage(cell: Vector2i, stage: TileRuntimeData.CropStage) -> void:
+	var tile := get_tile(cell)
+	tile.crop_stage = stage
+	tile.crop_timer = 0.0
+	crop_changed.emit(cell)
+
+
+## Entfernt den Weizen einer Zelle vollständig (nach Ernte oder Verfall).
+func clear_crop(cell: Vector2i) -> void:
+	var tile := get_tile(cell)
+	tile.crop_stage = TileRuntimeData.CropStage.NONE
+	tile.crop_timer = 0.0
+	crop_cells.erase(cell)
+	crop_changed.emit(cell)
+
+
+## Fällt den Baum auf dieser Zelle: Wald → Gras, Ressource verschwindet. Die Zelle
+## wird neu gezeichnet (terrain_changed) und steht später für Nachwachsen bereit.
+func remove_tree(cell: Vector2i) -> void:
+	var tile := get_tile(cell)
+	tile.terrain = TileRuntimeData.TerrainType.GRASS
+	tile.resource_amount = 0.0
+	_update_astar_weight(cell)
+	terrain_changed.emit(cell)
+
+
+## Lässt auf einer freien Graszelle einen neuen Baum wachsen (Wald + volle Ressource).
+func grow_tree(cell: Vector2i) -> void:
+	var tile := get_tile(cell)
+	tile.terrain = TileRuntimeData.TerrainType.FOREST
+	tile.resource_amount = 1.0
+	_update_astar_weight(cell)
+	terrain_changed.emit(cell)
+
+
+## Anzahl der 8 Nachbarzellen, die Wald sind (für exponentielles Baum-Nachwachsen).
+func count_forest_neighbors(cell: Vector2i) -> int:
+	var count := 0
+	for dir in NEIGHBOR_OFFSETS_8:
+		var n := cell + dir
+		if is_valid_cell(n) and get_tile(n).terrain == TileRuntimeData.TerrainType.FOREST:
+			count += 1
+	return count
+
+
+## M19: nach dem Laden eines Spielstands die Liste aktiver Weizen-Zellen neu aufbauen.
+func rebuild_crop_cells() -> void:
+	crop_cells.clear()
+	for y in range(MAP_SIZE.y):
+		for x in range(MAP_SIZE.x):
+			var cell := Vector2i(x, y)
+			if get_tile(cell).crop_stage != TileRuntimeData.CropStage.NONE:
+				crop_cells.append(cell)

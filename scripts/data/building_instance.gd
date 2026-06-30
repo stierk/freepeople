@@ -14,6 +14,8 @@ var crown_stock: Dictionary = {}
 var occupants: Array[int] = []
 var construction_timer: float = 0.0
 var is_constructed: bool = true
+## Noch ausstehende Baumaterialien, die ein Bewohner einzeln vom Lager holen muss
+var pending_build_cost: Dictionary = {}
 ## Countdown bis zur nächsten Produktion (M7: wird von SimulationManager getaktet)
 var production_timer: float = 0.0
 ## Erzeugte Güter die auf Abholung durch einen Bewohner warten (M7)

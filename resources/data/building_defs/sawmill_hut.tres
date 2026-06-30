@@ -6,9 +6,10 @@
 script = ExtResource("1")
 type = 5
 display_name = "Sawmill"
-footprint_size = Vector2i(2, 4)
-sprite_atlas_region = Rect2i(102, 425, 16, 16)
-max_capacity = 2
+footprint_size = Vector2i(3, 1)
+sprite_sheet = "farm"
+sprite_atlas_region = Rect2i(0, 192, 48, 16)
+max_capacity = 1
 build_time_seconds = 10.0
 is_player_placeable = false
 build_cost_gold = 0.0

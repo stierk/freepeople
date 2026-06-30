@@ -12,6 +12,9 @@ tile_set = ExtResource("2")
 [node name="OverlayLayer" type="TileMapLayer" parent="."]
 tile_set = ExtResource("2")
 
+[node name="TreeTopLayer" type="TileMapLayer" parent="."]
+tile_set = ExtResource("2")
+
 [node name="BuildingsContainer" type="Node2D" parent="."]
 
 [node name="AgentsContainer" type="Node2D" parent="."]

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="BuildingDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/building_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+type = 10
+display_name = "Windmill"
+footprint_size = Vector2i(1, 2)
+sprite_sheet = "px"
+sprite_atlas_region = Rect2i(160, 32, 16, 32)
+max_capacity = 1
+build_time_seconds = 10.0
+is_player_placeable = false
+build_cost_gold = 0.0
+build_cost = {
+0: 20.0,
+2: 10.0
+}
+storage_capacity = {}
+output_good = 5
+output_amount = 1.0
+output_interval = 10.0
+input_good = 4
+input_amount = 1.0
+carry_capacity = 1.0

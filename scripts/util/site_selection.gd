@@ -15,12 +15,16 @@ const ALPHA := {
 	InhabitantData.Profession.SAWMILL_WORKER: 0.3,
 	InhabitantData.Profession.QUARRY_WORKER: 1.0,
 	InhabitantData.Profession.FARMER: 1.0,
+	InhabitantData.Profession.MILLER: 0.3,
+	InhabitantData.Profession.BAKER: 0.3,
 }
 const BETA := {
 	InhabitantData.Profession.WOODCUTTER: 0.7,
 	InhabitantData.Profession.SAWMILL_WORKER: 1.2,
 	InhabitantData.Profession.QUARRY_WORKER: 0.7,
 	InhabitantData.Profession.FARMER: 0.7,
+	InhabitantData.Profession.MILLER: 1.2,
+	InhabitantData.Profession.BAKER: 1.2,
 }
 
 var world_grid
@@ -104,12 +108,18 @@ func _get_relevant_resource_cells(profession: InhabitantData.Profession) -> Arra
 				return []
 			var storage = building_manager.get_storage_yard()
 			return [storage.cell] if storage != null else []
+		InhabitantData.Profession.MILLER, InhabitantData.Profession.BAKER:
+			# Mühle/Bäckerei werden beim Kornspeicher gebaut (dort liegt ihr Ein-/Ausgangsgut).
+			var granary = building_manager.get_granary()
+			return [granary.cell] if granary != null else []
 		_:
 			return []
 
 
 func _get_relevant_storage(profession: InhabitantData.Profession) -> BuildingInstance:
-	if profession == InhabitantData.Profession.FARMER:
+	if profession == InhabitantData.Profession.FARMER \
+			or profession == InhabitantData.Profession.MILLER \
+			or profession == InhabitantData.Profession.BAKER:
 		return building_manager.get_granary()
 	return building_manager.get_storage_yard()
 
