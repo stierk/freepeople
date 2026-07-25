@@ -1,6 +1,6 @@
 ## GameOverPanel - M18
-## Wird angezeigt, sobald die Bevölkerung auf 0 sinkt (GameState.game_over).
-## Zeigt überlebte Tage + Highscore (user://highscore.json) und erlaubt einen Neustart.
+## Shown as soon as the population drops to 0 (GameState.game_over).
+## Shows days survived + highscore (user://highscore.json) and allows a restart.
 extends Control
 
 const HIGHSCORE_PATH := "user://highscore.json"

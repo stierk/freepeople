@@ -1,26 +1,12 @@
-[gd_resource type="Theme" load_steps=7 format=3]
+[gd_resource type="Theme" format=3 uid="uid://beqj7dlffv5us"]
 
-[ext_resource type="Texture2D" path="res://assets/kenney_ui_pixel_adventure/Tiles/Small tiles/Thick outline/tile_0010.png" id="1"]
-[ext_resource type="Texture2D" path="res://assets/kenney_ui_pixel_adventure/Tiles/Small tiles/Thick outline/tile_0012.png" id="2"]
-[ext_resource type="Texture2D" path="res://assets/kenney_ui_pixel_adventure/Tiles/Small tiles/Thick outline/tile_0011.png" id="3"]
-[ext_resource type="Texture2D" path="res://assets/kenney_ui_pixel_adventure/Tiles/Small tiles/Thick outline/tile_0013.png" id="4"]
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_panel"]
-texture = ExtResource("1")
-texture_margin_left = 4.0
-texture_margin_top = 4.0
-texture_margin_right = 4.0
-texture_margin_bottom = 4.0
+[ext_resource type="Texture2D" uid="uid://o3s1brloii7v" path="res://assets/kenney_ui_pixel_adventure/Tiles/Small tiles/Thick outline/tile_0010.png" id="1"]
+[ext_resource type="Texture2D" uid="uid://b7ix5kkolxfgr" path="res://assets/kenney_ui_pixel_adventure/Tiles/Small tiles/Thick outline/tile_0012.png" id="2"]
+[ext_resource type="Texture2D" uid="uid://bwdkdfg847dlu" path="res://assets/kenney_ui_pixel_adventure/Tiles/Small tiles/Thick outline/tile_0011.png" id="3"]
+[ext_resource type="Texture2D" uid="uid://cwj3fu6mxwe43" path="res://assets/kenney_ui_pixel_adventure/Tiles/Small tiles/Thick outline/tile_0013.png" id="4"]
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_btn_normal"]
 texture = ExtResource("2")
-texture_margin_left = 4.0
-texture_margin_top = 4.0
-texture_margin_right = 4.0
-texture_margin_bottom = 4.0
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_btn_pressed"]
-texture = ExtResource("3")
 texture_margin_left = 4.0
 texture_margin_top = 4.0
 texture_margin_right = 4.0
@@ -33,15 +19,29 @@ texture_margin_top = 4.0
 texture_margin_right = 4.0
 texture_margin_bottom = 4.0
 
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_btn_pressed"]
+texture = ExtResource("3")
+texture_margin_left = 4.0
+texture_margin_top = 4.0
+texture_margin_right = 4.0
+texture_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_panel"]
+texture = ExtResource("1")
+texture_margin_left = 4.0
+texture_margin_top = 4.0
+texture_margin_right = 4.0
+texture_margin_bottom = 4.0
+
 [resource]
 default_font_size = 8
-Label/colors/font_color = Color(0.2, 0.1, 0.05, 1.0)
-Panel/styles/panel = SubResource("StyleBoxTexture_panel")
-Button/styles/normal = SubResource("StyleBoxTexture_btn_normal")
-Button/styles/hover = SubResource("StyleBoxTexture_btn_hover")
-Button/styles/pressed = SubResource("StyleBoxTexture_btn_pressed")
-Button/styles/focus = SubResource("StyleBoxTexture_btn_normal")
+Button/colors/font_color = Color(0.2, 0.1, 0.05, 1)
+Button/colors/font_hover_color = Color(0.1, 0.05, 0.02, 1)
+Button/colors/font_pressed_color = Color(0.5, 0.3, 0.1, 1)
 Button/styles/disabled = SubResource("StyleBoxTexture_btn_normal")
-Button/colors/font_color = Color(0.2, 0.1, 0.05, 1.0)
-Button/colors/font_hover_color = Color(0.1, 0.05, 0.02, 1.0)
-Button/colors/font_pressed_color = Color(0.5, 0.3, 0.1, 1.0)
+Button/styles/focus = SubResource("StyleBoxTexture_btn_normal")
+Button/styles/hover = SubResource("StyleBoxTexture_btn_hover")
+Button/styles/normal = SubResource("StyleBoxTexture_btn_normal")
+Button/styles/pressed = SubResource("StyleBoxTexture_btn_pressed")
+Label/colors/font_color = Color(0.2, 0.1, 0.05, 1)
+Panel/styles/panel = SubResource("StyleBoxTexture_panel")

@@ -1,7 +1,7 @@
 ## SaveLoadManager – M10
-## Persistiert den gesamten Spielzustand (Welt, Gebäude, Bewohner, Krone) als JSON
-## unter user://savegame.json. World.gd reagiert auf das game_loaded-Signal und
-## baut die Visuals (Tiles/Gebäude-/Bewohner-Nodes) neu auf.
+## Persists the entire game state (world, buildings, inhabitants, crown) as JSON
+## under user://savegame.json. World.gd reacts to the game_loaded signal and
+## rebuilds the visuals (tile/building/inhabitant nodes).
 extends Node
 
 signal game_loaded
@@ -18,16 +18,16 @@ func _ready() -> void:
 	timer.autostart = true
 	timer.timeout.connect(save_game)
 	add_child(timer)
-	print("[M10:AutoSave] Auto-save aktiviert (alle %ds)." % AUTO_SAVE_INTERVAL)
+	print("[M10:AutoSave] Auto-save enabled (every %ds)." % AUTO_SAVE_INTERVAL)
 
 
 func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
 
-## M18: setzt das Spiel komplett zurück (Speicherstand löschen, alle Manager
-## zurücksetzen, Szene neu laden). Wird vom Neustart-Button in HUD und
-## GameOverPanel verwendet.
+## M18: fully resets the game (delete save game, reset all managers,
+## reload the scene). Used by the restart button in the HUD and
+## GameOverPanel.
 func restart_game() -> void:
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(SAVE_PATH)
@@ -36,12 +36,14 @@ func restart_game() -> void:
 	GameState.reset_state()
 	BuildingManager.reset_state()
 	SimulationManager.reset_state()
+	# Fresh recording files for the new run (the previous run gets flushed).
+	RunRecorder.start_new_run()
 
 	get_tree().reload_current_scene()
 
 
 # ---------------------------------------------------------------------------
-# Speichern
+# Saving
 # ---------------------------------------------------------------------------
 func save_game() -> void:
 	var data := {
@@ -58,11 +60,11 @@ func save_game() -> void:
 
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
-		push_error("SaveLoadManager: Konnte Speicherdatei nicht öffnen (%s)" % SAVE_PATH)
+		push_error("SaveLoadManager: could not open save file (%s)" % SAVE_PATH)
 		return
 	file.store_string(JSON.stringify(data))
 	file.close()
-	print("[M10:Save] Spiel gespeichert (%s)" % SAVE_PATH)
+	print("[M10:Save] Game saved (%s)" % SAVE_PATH)
 	game_saved.emit()
 
 
@@ -71,9 +73,11 @@ func _serialize_tiles() -> Array:
 	result.resize(WorldGrid.tiles.size())
 	for i in range(WorldGrid.tiles.size()):
 		var tile: TileRuntimeData = WorldGrid.tiles[i]
-		# M19: Weizen-Felder (Stufe, Timer, Besitzer) mitspeichern.
+		# M19: also save wheat fields (stage, timer, owner).
+		# M29: last_hunted_day appended at the end (backward compatible, see _deserialize_tiles).
 		result[i] = [tile.terrain, tile.path_type, tile.wear, tile.resource_amount,
-			tile.crop_stage, tile.crop_timer, tile.crop_field_owner]
+			tile.crop_stage, tile.crop_timer, tile.crop_field_owner, tile.biome,
+			tile.last_hunted_day]
 	return result
 
 
@@ -88,9 +92,12 @@ func _serialize_buildings() -> Array:
 			"construction_timer": b.construction_timer,
 			"production_timer": b.production_timer,
 			"community_stock": _stringify_keys(b.community_stock),
-			"crown_stock": _stringify_keys(b.crown_stock),
 			"output_stock": _stringify_keys(b.output_stock),
 			"occupants": b.occupants.duplicate(),
+			"last_repaired_day": b.last_repaired_day,
+			"needs_repair": b.needs_repair,
+			"is_derelict": b.is_derelict,
+			"pending_build_cost": _stringify_keys(b.pending_build_cost),
 		}
 		if b.market_data != null:
 			entry["market_data"] = {
@@ -103,6 +110,13 @@ func _serialize_buildings() -> Array:
 				"buy_price": _stringify_keys(b.trade_data.buy_price),
 				"sell_price": _stringify_keys(b.trade_data.sell_price),
 				"daily_tax": b.trade_data.daily_tax,
+			}
+		# M20: Town Hall policy (subsidy/tariff, basic income). Open exchange orders
+		# are deliberately not persisted (like paths – rebuilt during play).
+		if b.policy != null:
+			entry["policy"] = {
+				"subsidy": _stringify_keys(b.policy.subsidy),
+				"basic_income": b.policy.basic_income,
 			}
 		result.append(entry)
 	return result
@@ -122,6 +136,17 @@ func _serialize_inhabitants() -> Array:
 			"hunger": inh.hunger,
 			"missed_meals": inh.missed_meals,
 			"production_timer": inh.production_timer,
+			"margin": inh.margin,
+			"last_sale_unit_price": inh.last_sale_unit_price,
+			"last_food_unit_price": inh.last_food_unit_price,
+			"time_since_last_sale": inh.time_since_last_sale,
+			"unprofitable_streak": inh.unprofitable_streak,
+			# M28: evolutionary traits (see inhabitant_data.gd).
+			"trait_speed": inh.trait_speed,
+			"trait_strength": inh.trait_strength,
+			"trait_frugality": inh.trait_frugality,
+			"trait_diligence": inh.trait_diligence,
+			"trait_resilience": inh.trait_resilience,
 		})
 	return result
 
@@ -134,12 +159,12 @@ func _stringify_keys(dict: Dictionary) -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# Laden
+# Loading
 # ---------------------------------------------------------------------------
 func load_game() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
 	if file == null:
-		push_error("SaveLoadManager: Keine Speicherdatei gefunden (%s)" % SAVE_PATH)
+		push_error("SaveLoadManager: no save file found (%s)" % SAVE_PATH)
 		return
 
 	var text := file.get_as_text()
@@ -147,11 +172,11 @@ func load_game() -> void:
 
 	var parsed: Variant = JSON.parse_string(text)
 	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error("SaveLoadManager: Speicherdatei ist beschädigt.")
+		push_error("SaveLoadManager: save file is corrupted.")
 		return
 
 	_deserialize(parsed)
-	print("[M10:Load] Spiel geladen (%s)" % SAVE_PATH)
+	print("[M10:Load] Game loaded (%s)" % SAVE_PATH)
 	game_loaded.emit()
 
 
@@ -181,7 +206,7 @@ func _deserialize(data: Dictionary) -> void:
 	GlobalInventory.notify_resources_changed()
 	GlobalInventory.notify_population_changed(GameState.population_count())
 
-	# M18: ein gespeicherter Spielstand mit Bevölkerung 0 bedeutet Game Over.
+	# M18: a saved game with population 0 means game over.
 	if GameState.inhabitants.is_empty():
 		GameState.game_over.emit(SimulationManager.get_current_day())
 
@@ -196,11 +221,16 @@ func _deserialize_tiles(tiles_data: Array) -> void:
 		tile.path_type = entry[1] as TileRuntimeData.PathType
 		tile.wear = entry[2]
 		tile.resource_amount = entry[3]
-		# M19: Weizen-Felder (abwärtskompatibel zu alten Spielständen ohne diese Felder).
+		# M19: wheat fields (backward compatible with old saves without these fields).
 		if entry.size() > 6:
 			tile.crop_stage = entry[4] as TileRuntimeData.CropStage
 			tile.crop_timer = entry[5]
 			tile.crop_field_owner = int(entry[6])
+		if entry.size() > 7:
+			tile.biome = int(entry[7])
+		# M29: hunting cooldown (backward compatible with saves without this field).
+		if entry.size() > 8:
+			tile.last_hunted_day = int(entry[8])
 		tiles[i] = tile
 	WorldGrid.tiles = tiles
 	WorldGrid.rebuild_crop_cells()
@@ -218,12 +248,17 @@ func _deserialize_building(entry: Dictionary) -> BuildingInstance:
 	b.construction_timer = entry.get("construction_timer", 0.0)
 	b.production_timer = entry.get("production_timer", 0.0)
 	b.community_stock = _intify_keys(entry.get("community_stock", {}))
-	b.crown_stock = _intify_keys(entry.get("crown_stock", {}))
+	# M26: crown_stock removed – old save games may still contain the key, it is ignored.
 	b.output_stock = _intify_keys(entry.get("output_stock", {}))
 
 	b.occupants = []
 	for occ in entry.get("occupants", []):
 		b.occupants.append(int(occ))
+
+	b.last_repaired_day = int(entry.get("last_repaired_day", 0))
+	b.needs_repair = entry.get("needs_repair", false)
+	b.is_derelict = entry.get("is_derelict", false)
+	b.pending_build_cost = _intify_keys(entry.get("pending_build_cost", {}))
 
 	if entry.has("market_data"):
 		var md_entry: Dictionary = entry["market_data"]
@@ -240,6 +275,28 @@ func _deserialize_building(entry: Dictionary) -> BuildingInstance:
 		td.sell_price = _intify_keys(td_entry.get("sell_price", {}))
 		td.daily_tax = td_entry.get("daily_tax", 0.0)
 		b.trade_data = td
+
+	# M20: restore Town Hall policy (or create fresh for old save games).
+	if entry.has("policy"):
+		var p_entry: Dictionary = entry["policy"]
+		var p := PolicyData.new()
+		p.subsidy = _intify_keys(p_entry.get("subsidy", {}))
+		p.basic_income = p_entry.get("basic_income", 0.0)
+		b.policy = p
+	elif b.def.type == BuildingDef.BuildingType.TOWN_HALL:
+		b.policy = PolicyData.new()
+
+	# M20: rebuild the exchange (floor/ceiling from the just-loaded TradeData).
+	if b.def.type == BuildingDef.BuildingType.STORAGE_YARD:
+		b.exchange = MarketExchange.new()
+		b.exchange.setup(b, BuildingManager.STORAGE_GOODS)
+	elif b.def.type == BuildingDef.BuildingType.GRANARY:
+		b.exchange = MarketExchange.new()
+		b.exchange.setup(b, BuildingManager.GRANARY_GOODS)
+	elif b.def.type == BuildingDef.BuildingType.TOWN_HALL:
+		# Town Hall = storage yard + granary in one (fixed average price, no TradeData).
+		b.exchange = MarketExchange.new()
+		b.exchange.setup(b, BuildingManager.TOWN_HALL_GOODS)
 
 	return b
 
@@ -261,10 +318,23 @@ func _deserialize_inhabitant(entry: Dictionary) -> InhabitantData:
 	inh.hunger = entry.get("hunger", 0.0)
 	inh.missed_meals = entry.get("missed_meals", 0)
 	inh.production_timer = entry.get("production_timer", 0.0)
+	# M20: market economy metrics (backward compatible; margin otherwise random).
+	inh.margin = entry.get("margin", randf())
+	inh.last_sale_unit_price = entry.get("last_sale_unit_price", 0.0)
+	inh.last_food_unit_price = entry.get("last_food_unit_price", Goods.BASE_PRICES[Goods.GoodType.FOOD])
+	inh.time_since_last_sale = entry.get("time_since_last_sale", 0.0)
+	inh.unprofitable_streak = entry.get("unprofitable_streak", 0)
+	# M28: evolutionary traits (backward compatible; otherwise random like margin above).
+	inh.trait_speed = entry.get("trait_speed", randf())
+	inh.trait_strength = entry.get("trait_strength", randf())
+	inh.trait_frugality = entry.get("trait_frugality", randf())
+	inh.trait_diligence = entry.get("trait_diligence", randf())
+	inh.trait_resilience = entry.get("trait_resilience", randf())
+	inh.recompute_derived_stats()
 
-	# Bewegungs-/Lieferzustände werden nicht persistiert (kein Pfad gespeichert) –
-	# Bewohner werden anhand ihres Heimatgebäudes in einen sicheren Zustand versetzt
-	# und planen ihre nächste Route bei Bedarf neu.
+	# Movement/delivery state is not persisted (no path saved) –
+	# inhabitants are put into a safe state based on their home building
+	# and plan their next route again as needed.
 	var home := BuildingManager.get_building(inh.home_building_id)
 	if home == null:
 		inh.state = InhabitantData.State.SEEKING_SITE

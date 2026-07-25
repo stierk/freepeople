@@ -9,6 +9,7 @@ display_name = "Bakery"
 footprint_size = Vector2i(1, 1)
 sprite_sheet = "farm"
 sprite_atlas_region = Rect2i(0, 160, 16, 16)
+has_smoke = true
 max_capacity = 1
 build_time_seconds = 10.0
 is_player_placeable = false

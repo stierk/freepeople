@@ -9,6 +9,7 @@ display_name = "Quarry Hut"
 footprint_size = Vector2i(1, 1)
 sprite_sheet = "vik"
 sprite_atlas_region = Rect2i(320, 272, 16, 16)
+anim_frames = 4
 max_capacity = 1
 build_time_seconds = 10.0
 is_player_placeable = false

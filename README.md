@@ -1,3 +1,30 @@
+# Freepeople
+
+Freepeople is a **self-organizing village economy simulation** built in **Godot 4.6** (mobile,
+landscape). You don't command people directly — each inhabitant is autonomous: it picks a
+profession, builds or reclaims a hut, gathers resources, runs a production chain, trades on a
+market, buys food, and starves if it can't eat. Your settlement lives or dies by whether the
+economy keeps everyone fed. The game ends when the population reaches zero — the score is how many
+in-game days you survived.
+
+## Mechanics at a glance
+
+- **Autonomous inhabitants** with a state machine: seek work, build, produce, deliver, trade, eat.
+- **Professions & production chains** — Woodcutter → Wood → Sawmill → Planks; Quarry → Stone; and the
+  food chain **Farmer → Grain → Windmill → Flour → Bakery → Food** that keeps everyone alive.
+- **Decentralized market** — storages and granaries host exchanges with order matching, price drift,
+  per-person margins/break-even, and distance costs; unprofitable workers switch jobs.
+- **Hunger & survival** — inhabitants eat 3 meals/day; too many missed meals means death, and an empty
+  village is game over.
+- **Living world** — 64×64 tile map with forests, stone and water, emergent desire paths from foot
+  traffic, resource depletion/regrowth, and crop fields around farms.
+- **Time controls** (pause / 1× / 2× / 5×) and **save/load**.
+
+**Deep dive:** see [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) for the full current-state reference,
+and [`CLAUDE.md`](CLAUDE.md) for the code architecture map. Build instructions follow below.
+
+---
+
 # Freepeople – Android Build Instructions
 
 ## Prerequisites

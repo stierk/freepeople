@@ -1,14 +1,14 @@
 extends Node2D
 
 const FRAME_SIZE := 32  # MinifVillagers frames are 32x32
-const IDLE_ROW := 0     # Bildzeile 0 ist auf allen Bögen die Idle-Animation
+const IDLE_ROW := 0     # row 0 is the idle animation on every sheet
 const MOVE_EPSILON := 0.15  # px/frame threshold to count as "moving"
 
-## MinifVillagers-Charakterbogen + Animationszeilen pro Beruf. Die Bögen haben kein
-## einheitliches Layout, daher wird pro Beruf angegeben, in welcher Bildzeile die
-## Lauf- ("walk") bzw. Arbeitsanimation ("work") liegt. Idle ist immer Zeile 0.
-## work = -1 → keine Arbeitsanimation (einfache Dorfbewohner). Die Anzahl der Frames
-## je Zeile wird automatisch aus dem Bogen erkannt (_count_row_frames).
+## MinifVillagers character sheet + animation rows per profession. The sheets have no
+## uniform layout, so for each profession we record which row holds the walk
+## ("walk") resp. work animation ("work"). Idle is always row 0.
+## work = -1 → no work animation (plain villager). The frame count per
+## row is auto-detected from the sheet (_count_row_frames).
 const PROFESSION_ANIM := {
 	InhabitantData.Profession.NONE: {
 		"sheet": preload("res://assets/minif_villagers/MiniVillagerMan.png"), "walk": 1, "work": -1,
@@ -20,26 +20,32 @@ const PROFESSION_ANIM := {
 		"sheet": preload("res://assets/minif_villagers/MiniBlacksmith.png"), "walk": 3, "work": 1,
 	},
 	InhabitantData.Profession.QUARRY_WORKER: {
-		# walk = Zeile 3 (Pickel auf der Schulter, sauberer Lauf); Zeile 1 war ein
-		# Vorwärts-Hieb und sah beim Laufen wie Hacken aus. work = Zeile 5 (Abbau-Schlag).
+		# walk = row 3 (pickaxe on the shoulder, clean walk); row 1 was a
+		# forward swing and looked like chopping while walking. work = row 5 (mining swing).
 		"sheet": preload("res://assets/minif_villagers/MiniMiner.png"), "walk": 3, "work": 5,
 	},
 	InhabitantData.Profession.FARMER: {
 		"sheet": preload("res://assets/minif_villagers/MiniGatherer.png"), "walk": 1, "work": 2,
 	},
-	# Müller/Bäcker arbeiten passiv im Gebäude (Mahlen/Backen) und liefern aus –
-	# schlichte Dorfbewohner-Bögen, keine eigene Arbeitsanimation nötig.
+	# Miller/baker work passively inside the building (milling/baking) and deliver –
+	# plain villager sheets, no dedicated work animation needed.
 	InhabitantData.Profession.MILLER: {
 		"sheet": preload("res://assets/minif_villagers/MiniWorker.png"), "walk": 1, "work": -1,
 	},
 	InhabitantData.Profession.BAKER: {
 		"sheet": preload("res://assets/minif_villagers/MiniPeasant.png"), "walk": 1, "work": -1,
 	},
+	# M29: hunter uses the (already existing) MiniHunter sheet. work = row 3: the bow-draw
+	# + release ("going on a hunt"), the most fitting hunting action on the sheet
+	# (row 5 was a crouching dagger slash and read wrong).
+	InhabitantData.Profession.HUNTER: {
+		"sheet": preload("res://assets/minif_villagers/MiniHunter.png"), "walk": 1, "work": 3,
+	},
 }
 
-## Frisch erschienene / arbeitslose Bewohner (Profession.NONE) bekommen einen von
-## mehreren schlichten Dorfbewohnern (anhand ihrer ID), damit die Menge abwechslungs-
-## reich aussieht. Sobald sie einen Beruf annehmen, wechseln sie auf den Berufsbogen.
+## Freshly spawned / unemployed inhabitants (Profession.NONE) get one of several
+## plain villagers (based on their ID) so the crowd looks varied. As soon as they
+## take up a profession, they switch to the profession sheet.
 const NONE_VARIANTS := [
 	{"sheet": preload("res://assets/minif_villagers/MiniVillagerMan.png"), "walk": 1, "work": -1},
 	{"sheet": preload("res://assets/minif_villagers/MiniVillagerWoman.png"), "walk": 1, "work": -1},
@@ -47,14 +53,15 @@ const NONE_VARIANTS := [
 	{"sheet": preload("res://assets/minif_villagers/MiniOldMan.png"), "walk": 1, "work": -1},
 ]
 
-## Berufe und der Zustand, in dem ihre Arbeitsanimation gespielt wird (wenn der
-## Bewohner gerade nicht läuft): Holzfäller/Steinmetz beim Abbau an der Ressource,
-## Bauer auf dem Feld, Sägewerker (Schmied) an der Hütte.
+## Professions and the state in which their work animation plays (when the
+## inhabitant is not currently walking): woodcutter/quarry worker while mining the
+## resource, farmer in the field, sawmill worker (blacksmith) at the hut.
 const WORK_STATE := {
 	InhabitantData.Profession.WOODCUTTER: InhabitantData.State.GATHERING,
 	InhabitantData.Profession.QUARRY_WORKER: InhabitantData.State.GATHERING,
 	InhabitantData.Profession.FARMER: InhabitantData.State.FARM_TENDING,
 	InhabitantData.Profession.SAWMILL_WORKER: InhabitantData.State.WORKING,
+	InhabitantData.Profession.HUNTER: InhabitantData.State.HUNTING,  # M29: hunting animation at the forest cell
 }
 
 const COLOR_HUNGRY := Color(0.82, 0.51, 0.27, 1.0)
@@ -62,8 +69,8 @@ const COLOR_STARVED := Color(0.35, 0.2, 0.12, 1.0)
 const COLOR_GRAVE := Color(0.45, 0.45, 0.45, 0.85)
 const COLOR_LERP_SPEED := 2.0
 
-## Gemeinsamer SpriteFrames-Cache je Charakterbogen – jeder Bogen wird nur einmal
-## analysiert und das Ergebnis von allen Bewohnern geteilt, die ihn verwenden.
+## Shared SpriteFrames cache per character sheet – each sheet is analyzed only once
+## and the result is shared by all inhabitants who use it.
 static var _frames_cache: Dictionary = {}
 
 var data: InhabitantData
@@ -91,8 +98,8 @@ func _update_sprite() -> void:
 	sprite.play(_current_anim)
 
 
-## Wählt Charakterbogen + Animationszeilen für diesen Bewohner. Arbeitslose (NONE)
-## erhalten anhand ihrer ID eine von mehreren schlichten Dorfbewohner-Varianten.
+## Chooses the character sheet + animation rows for this inhabitant. Unemployed (NONE)
+## inhabitants get one of several plain villager variants based on their ID.
 func _resolve_cfg() -> Dictionary:
 	var prof := data.profession if data else InhabitantData.Profession.NONE
 	if prof == InhabitantData.Profession.NONE:
@@ -100,7 +107,7 @@ func _resolve_cfg() -> Dictionary:
 	return PROFESSION_ANIM.get(prof, NONE_VARIANTS[0])
 
 
-## Liefert das (gecachte) SpriteFrames für eine Bogen-Konfiguration (Cache je Bogen).
+## Returns the (cached) SpriteFrames for a sheet configuration (cache per sheet).
 static func _get_frames(cfg: Dictionary) -> SpriteFrames:
 	var sheet: Texture2D = cfg["sheet"]
 	if _frames_cache.has(sheet):
@@ -110,9 +117,9 @@ static func _get_frames(cfg: Dictionary) -> SpriteFrames:
 	return frames
 
 
-## Baut ein SpriteFrames mit "idle"-, "walk"- und (falls vorhanden) "work"-Animation
-## aus dem 32x32-Raster des Charakterbogens. Die Framezahl je Zeile wird automatisch
-## erkannt, da die Bögen unterschiedlich viele Frames pro Animation haben.
+## Builds a SpriteFrames with "idle", "walk" and (if present) "work" animation
+## from the character sheet's 32x32 grid. The frame count per row is auto-detected,
+## since the sheets have varying numbers of frames per animation.
 static func _build_frames(cfg: Dictionary) -> SpriteFrames:
 	var sheet: Texture2D = cfg["sheet"]
 	var img := sheet.get_image()
@@ -124,7 +131,7 @@ static func _build_frames(cfg: Dictionary) -> SpriteFrames:
 	_add_anim(frames, &"walk", sheet, img, int(cfg["walk"]), max_cols, 10.0)
 	if int(cfg["work"]) >= 0:
 		_add_anim(frames, &"work", sheet, img, int(cfg["work"]), max_cols, 8.0)
-	# Letzte Bildzeile ist die Sterbe-/Zusammenbruch-Animation (für Gräber, nicht loopend).
+	# Last row is the death/collapse animation (for graves, non-looping).
 	var last_row := int(sheet.get_height() / FRAME_SIZE) - 1
 	if last_row > IDLE_ROW:
 		_add_anim(frames, &"death", sheet, img, last_row, max_cols, 8.0, false)
@@ -144,9 +151,9 @@ static func _add_anim(frames: SpriteFrames, name: StringName, sheet: Texture2D, 
 		frames.add_frame(name, atlas)
 
 
-## Zählt die zusammenhängenden, nicht-leeren 32x32-Frames einer Zeile (von links).
-## Die Animationen sind linksbündig gepackt, daher endet die Zeile beim ersten
-## komplett transparenten Frame.
+## Counts the contiguous, non-empty 32x32 frames of a row (from the left).
+## The animations are packed left-aligned, so the row ends at the first
+## fully transparent frame.
 static func _count_row_frames(img: Image, row: int, max_cols: int) -> int:
 	if img == null or (row + 1) * FRAME_SIZE > img.get_height():
 		return 0
@@ -172,13 +179,16 @@ func _process(delta: float) -> void:
 	if is_grave or data == null:
 		return
 
+	# Debug profiling: measure our own cost and attribute it to the perf report (only when active).
+	var _pt: int = Time.get_ticks_usec() if SimulationManager.DEBUG_PERF else 0
+
 	gold_label.text = str(int(data.gold))
 
 	if data.profession != _last_profession:
 		_update_sprite()
 
-	# Bewegung erkennen: läuft der Bewohner gerade, "walk"-Animation, sonst Arbeits-
-	# oder Idle-Animation je nach Zustand.
+	# Detect movement: if the inhabitant is currently walking, "walk" animation, otherwise
+	# work or idle animation depending on state.
 	var moved := position.distance_to(_last_pos) > MOVE_EPSILON
 	if moved and absf(position.x - _last_pos.x) > 0.05:
 		sprite.flip_h = position.x < _last_pos.x
@@ -201,14 +211,39 @@ func _process(delta: float) -> void:
 		target = COLOR_HUNGRY
 	modulate = modulate.lerp(target, minf(1.0, delta * COLOR_LERP_SPEED))
 
+	if SimulationManager.DEBUG_PERF:
+		SimulationManager.report_inhabitant_process_usec(Time.get_ticks_usec() - _pt)
 
-## Verrichtet der Bewohner gerade (stehend) seine berufstypische Arbeit?
+
+## Is the inhabitant currently (standing) performing their profession-typical work?
 func _is_working() -> bool:
 	return WORK_STATE.has(data.profession) and data.state == WORK_STATE[data.profession]
 
 
-## M18: Bewohner ist verstorben - Node bleibt als Grab stehen, keine weiteren Updates.
-## Die Sterbe-Animation läuft einmalig durch und hält dann den liegenden Frame.
+## M21: Shows a short-lived, rising +/- gold number above the inhabitant (green =
+## income, red = expense). Makes it visible that the budget is really used on
+## buy/sell/tax/repair. Tiny amounts are ignored to avoid spam.
+func show_gold_delta(amount: float) -> void:
+	if is_grave:
+		return
+	var n := int(roundf(amount))
+	if n == 0:
+		return
+	var popup := Label.new()
+	popup.text = "+%d" % n if n > 0 else str(n)
+	popup.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4) if n > 0 else Color(0.95, 0.4, 0.35))
+	popup.add_theme_font_size_override("font_size", 8)
+	popup.z_index = 20
+	popup.position = Vector2(-6.0, -22.0)
+	add_child(popup)
+	var tween := create_tween()
+	tween.tween_property(popup, "position:y", popup.position.y - 12.0, 0.8)
+	tween.parallel().tween_property(popup, "modulate:a", 0.0, 0.8)
+	tween.tween_callback(popup.queue_free)
+
+
+## M18: inhabitant has died - node remains standing as a grave, no further updates.
+## The death animation plays once and then holds the final lying-down frame.
 func mark_as_grave() -> void:
 	is_grave = true
 	modulate = COLOR_GRAVE

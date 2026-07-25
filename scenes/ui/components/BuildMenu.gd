@@ -1,6 +1,6 @@
-## BuildMenu (Baumenü) – M9
-## Listet alle spielerplatzierbaren Gebäude (BuildingDef.is_player_placeable) auf.
-## Ein Klick aktiviert den Platzierungsmodus; Main.gd fragt active_def beim Tile-Tap ab.
+## BuildMenu – M9
+## Lists all player-placeable buildings (BuildingDef.is_player_placeable).
+## A click activates placement mode; Main.gd queries active_def on tile tap.
 extends Control
 
 signal placement_selected(def: BuildingDef)
@@ -26,7 +26,7 @@ func _ready() -> void:
 		_buttons[def.type] = button
 
 
-## M13: zeigt sowohl Güter- als auch Goldkosten an.
+## M13: shows both goods and gold costs.
 func _format_cost(def: BuildingDef) -> String:
 	var parts: PackedStringArray = []
 	for good: int in def.build_cost.keys():

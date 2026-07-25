@@ -1,8 +1,8 @@
 class_name TradeData
 extends RefCounted
 
-## M14/M17: Spielerseitig editierbare An-/Verkaufspreise und Steuersatz
-## fuer Lagerplatz/Kornspeicher/Schatzkammer. Startwerte aus Goods.BASE_PRICES.
+## M14/M17: player-editable buy/sell prices and tax rate
+## for storage yard/granary/treasury. Starting values from Goods.BASE_PRICES.
 
 var buy_price: Dictionary = {}
 var sell_price: Dictionary = {}

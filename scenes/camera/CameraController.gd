@@ -59,6 +59,8 @@ func _handle_drag(event: InputEventScreenDrag) -> void:
 			_is_dragging = true
 		position -= event.relative / zoom
 	elif _touch_points.size() == 2:
+		if _pointer_over_ui():
+			return  # the pinch belongs to the UI panel under the finger, not the map
 		var points := _touch_points.values()
 		var dist: float = points[0].distance_to(points[1])
 		if _pinch_start_dist == 0.0:
@@ -73,10 +75,22 @@ func _handle_drag(event: InputEventScreenDrag) -> void:
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
 	if not event.pressed:
 		return
+	if event.button_index != MOUSE_BUTTON_WHEEL_UP and event.button_index != MOUSE_BUTTON_WHEEL_DOWN:
+		return
+	if _pointer_over_ui():
+		return  # scrolling belongs to the UI panel under the pointer, not the map
 	if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 		zoom = Vector2.ONE * clamp(zoom.x + ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)
-	elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+	else:
 		zoom = Vector2.ONE * clamp(zoom.x - ZOOM_STEP, MIN_ZOOM, MAX_ZOOM)
+
+
+## true if the pointer is over a UI element that accepts mouse events
+## (mouse_filter != IGNORE). This automatically applies to EVERY UI panel – InfoPanel,
+## BuildMenu, GameOverPanel – without each one needing to be known individually. The HUD
+## bar deliberately stays at IGNORE and still lets zoom through.
+func _pointer_over_ui() -> bool:
+	return get_viewport().gui_get_hovered_control() != null
 
 
 func _maybe_emit_tap(screen_pos: Vector2) -> void:

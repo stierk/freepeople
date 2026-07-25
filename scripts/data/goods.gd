@@ -1,9 +1,9 @@
 class_name Goods
 extends RefCounted
 
-# GRAIN/FLOUR sind Zwischenprodukte der Nahrungskette: Bauer erntet GRAIN →
-# Windmühle mahlt zu FLOUR → Bäckerei backt FOOD. Neue Werte werden ans Ende
-# gehängt, damit bestehende Spielstände (Enum als Int gespeichert) gültig bleiben.
+# GRAIN/FLOUR are intermediate products of the food chain: the farmer harvests GRAIN →
+# the windmill grinds it into FLOUR → the bakery bakes FOOD. New values are appended at the
+# end so existing save games (enum stored as int) stay valid.
 enum GoodType { WOOD, PLANKS, STONE, FOOD, GRAIN, FLOUR }
 
 const BASE_PRICES := {
@@ -15,7 +15,7 @@ const BASE_PRICES := {
 	GoodType.FLOUR: 1.5,
 }
 
-## M18: englische Anzeigenamen für UI-Texte (HUD, BuildMenu, InfoPanel).
+## M18: English display names for UI text (HUD, BuildMenu, InfoPanel).
 const DISPLAY_NAMES := {
 	GoodType.WOOD: "Wood",
 	GoodType.PLANKS: "Planks",

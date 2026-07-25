@@ -6,9 +6,9 @@
 script = ExtResource("1")
 type = 2
 display_name = "Treasury"
-footprint_size = Vector2i(1, 4)
+footprint_size = Vector2i(1, 2)
 sprite_sheet = "base"
-sprite_atlas_region = Rect2i(608, 528, 16, 64)
+sprite_atlas_region = Rect2i(608, 528, 16, 32)
 max_capacity = 2
 build_time_seconds = 0.0
 is_player_placeable = true

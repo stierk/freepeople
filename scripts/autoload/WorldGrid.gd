@@ -1,11 +1,11 @@
 extends Node
 
 signal path_type_changed(cell: Vector2i)
-## M19: Feuert wenn sich der Weizenzustand einer Zelle ändert (Pflanzen, Wachsen,
-## Ernten, Verdorren) – World.gd zeichnet die betroffene Zelle neu.
+## M19: fires when a cell's wheat state changes (planting, growing,
+## harvesting, withering) – World.gd redraws the affected cell.
 signal crop_changed(cell: Vector2i)
-## Feuert wenn sich der Geländetyp einer Zelle ändert (gefällter/nachgewachsener
-## Baum) – World.gd zeichnet die betroffene Zelle neu.
+## Fires when a cell's terrain type changes (felled/regrown
+## tree) – World.gd redraws the affected cell.
 signal terrain_changed(cell: Vector2i)
 
 const MAP_SIZE := Vector2i(64, 64)
@@ -19,7 +19,7 @@ const WEAR_PER_STEP := 1.0
 const WEAR_DECAY_PER_TICK := 0.02
 
 const NEIGHBOR_OFFSETS: Array[Vector2i] = [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]
-## M19: 8er-Nachbarschaft für Pflanz-Regeln (kein Weizen neben Gebäude/Weg).
+## M19: 8-neighborhood for planting rules (no wheat next to a building/path).
 const NEIGHBOR_OFFSETS_8: Array[Vector2i] = [
 	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
@@ -27,7 +27,7 @@ const NEIGHBOR_OFFSETS_8: Array[Vector2i] = [
 
 var tiles: Array = []
 var astar := AStarGrid2D.new()
-## M19: aktive Weizen-Zellen für effizientes Ticken (statt der ganzen Karte).
+## M19: active wheat cells for efficient ticking (instead of the whole map).
 var crop_cells: Array[Vector2i] = []
 
 
@@ -110,17 +110,30 @@ func path_cost(from_cell: Vector2i, to_cell: Vector2i) -> float:
 	return cost
 
 
-func register_step(cell: Vector2i) -> void:
+## exempt = true: this step causes no wear – used for a farmer crossing their own field
+## and (M32) for a woodcutter/hunter moving through forest, so they don't trample away the
+## very forest they depend on. All others wear the cell down normally; if that turns it into
+## a path, a field loses its status (including wheat) and a forest tile is destroyed.
+func register_step(cell: Vector2i, exempt: bool = false) -> void:
 	var tile := get_tile(cell)
 	if tile.path_type == TileRuntimeData.PathType.ROAD:
 		return
-	# M19: Ackerfelder werden nicht zertrampelt – ein Bauer macht keinen Weg quer
-	# durch sein eigenes Feld, sondern nur auf dem Weg zu anderen Gebäuden.
-	if tile.crop_field_owner != -1:
+	if exempt:
 		return
 	tile.wear += WEAR_PER_STEP
 	if tile.wear >= WEAR_THRESHOLD and tile.path_type == TileRuntimeData.PathType.NONE:
 		tile.path_type = TileRuntimeData.PathType.DESIRE_PATH
+		# A field trodden too often becomes a trampled path and is then no longer farmland.
+		if tile.crop_field_owner != -1:
+			tile.crop_field_owner = -1
+			if tile.crop_stage != TileRuntimeData.CropStage.NONE:
+				clear_crop(cell)
+		# M32: a path worn across forest tramples the tree away – the cell turns to plain
+		# grass and is no longer forest (not huntable/harvestable anymore).
+		if tile.terrain == TileRuntimeData.TerrainType.FOREST:
+			tile.terrain = TileRuntimeData.TerrainType.GRASS
+			tile.resource_amount = 0.0
+			terrain_changed.emit(cell)
 		_update_astar_weight(cell)
 		path_type_changed.emit(cell)
 
@@ -145,7 +158,7 @@ func set_building_footprint(cell: Vector2i, building_id: int, solid: bool) -> vo
 	astar.set_point_solid(cell, solid)
 
 
-## M11: Alle Zellen eines mehrzelligen Footprints (origin = oben links).
+## M11: all cells of a multi-cell footprint (origin = top-left).
 func get_footprint_cells(origin: Vector2i, size: Vector2i) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	for y in range(size.y):
@@ -154,8 +167,8 @@ func get_footprint_cells(origin: Vector2i, size: Vector2i) -> Array[Vector2i]:
 	return cells
 
 
-## M11: Prüft ob ein gesamter mehrzelliger Footprint bebaubar ist
-## (alle Zellen gültig, begehbar und unbesetzt).
+## M11: checks whether an entire multi-cell footprint is buildable
+## (all cells valid, walkable, and unoccupied).
 func is_footprint_buildable(origin: Vector2i, size: Vector2i) -> bool:
 	for cell in get_footprint_cells(origin, size):
 		if not is_walkable(cell):
@@ -165,7 +178,7 @@ func is_footprint_buildable(origin: Vector2i, size: Vector2i) -> bool:
 	return true
 
 
-## M11: set_building_footprint über alle Zellen eines mehrzelligen Footprints.
+## M11: set_building_footprint over all cells of a multi-cell footprint.
 func set_building_footprint_rect(origin: Vector2i, size: Vector2i, building_id: int, solid: bool) -> void:
 	for cell in get_footprint_cells(origin, size):
 		set_building_footprint(cell, building_id, solid)
@@ -184,12 +197,13 @@ func _update_astar_weight(cell: Vector2i) -> void:
 
 
 # ---------------------------------------------------------------------------
-# M19: Weizen / Ackerbau
+# M19: wheat / farming
 # ---------------------------------------------------------------------------
 
-## Markiert begehbare Grasfelder rund um eine Bauernhütte als Ackerland dieser
-## Hütte (crop_field_owner = building_id). Felder dürfen nicht auf dem Footprint
-## und nicht direkt an einem Gebäude liegen.
+## Marks grass cells around a farm house as this hut's farmland
+## (crop_field_owner = building_id) – including cells directly adjacent to the house.
+## Only excluded are non-grass (forest/stone/water), paths, and cells
+## already occupied by a building or another field.
 func designate_farm_field(origin: Vector2i, size: Vector2i, building_id: int, radius: int) -> void:
 	var min_x := origin.x - radius
 	var max_x := origin.x + size.x - 1 + radius
@@ -203,15 +217,16 @@ func designate_farm_field(origin: Vector2i, size: Vector2i, building_id: int, ra
 			var tile := get_tile(cell)
 			if tile.terrain != TileRuntimeData.TerrainType.GRASS:
 				continue
-			if tile.building_id != -1 or tile.crop_field_owner != -1:
+			if tile.path_type != TileRuntimeData.PathType.NONE:
 				continue
-			if _has_adjacent_building(cell):
+			if tile.building_id != -1 or tile.crop_field_owner != -1:
 				continue
 			tile.crop_field_owner = building_id
 
 
-## Darf auf dieser Zelle Weizen gepflanzt werden? Nur auf leerem Gras, nicht auf
-## einem Weg, nicht auf/neben einem Gebäude und nicht neben einem Weg.
+## May wheat be planted on this cell? Allowed directly next to the owner's own
+## house – only blocked if the cell itself isn't free grass: path, forest/stone
+## (not grass), a building, or already planted.
 func is_plantable(cell: Vector2i) -> bool:
 	if not is_valid_cell(cell):
 		return false
@@ -224,15 +239,6 @@ func is_plantable(cell: Vector2i) -> bool:
 		return false
 	if tile.crop_stage != TileRuntimeData.CropStage.NONE:
 		return false
-	for dir in NEIGHBOR_OFFSETS_8:
-		var n := cell + dir
-		if not is_valid_cell(n):
-			continue
-		var ntile := get_tile(n)
-		if ntile.building_id != -1:
-			return false
-		if ntile.path_type != TileRuntimeData.PathType.NONE:
-			return false
 	return true
 
 
@@ -255,7 +261,7 @@ func plant_crop(cell: Vector2i, owner_id: int) -> void:
 	crop_changed.emit(cell)
 
 
-## Setzt eine Weizenzelle auf eine neue Stufe (Wachstum oder Verdorren).
+## Sets a wheat cell to a new stage (growth or withering).
 func set_crop_stage(cell: Vector2i, stage: TileRuntimeData.CropStage) -> void:
 	var tile := get_tile(cell)
 	tile.crop_stage = stage
@@ -263,7 +269,7 @@ func set_crop_stage(cell: Vector2i, stage: TileRuntimeData.CropStage) -> void:
 	crop_changed.emit(cell)
 
 
-## Entfernt den Weizen einer Zelle vollständig (nach Ernte oder Verfall).
+## Fully removes the wheat from a cell (after harvest or decay).
 func clear_crop(cell: Vector2i) -> void:
 	var tile := get_tile(cell)
 	tile.crop_stage = TileRuntimeData.CropStage.NONE
@@ -272,8 +278,8 @@ func clear_crop(cell: Vector2i) -> void:
 	crop_changed.emit(cell)
 
 
-## Fällt den Baum auf dieser Zelle: Wald → Gras, Ressource verschwindet. Die Zelle
-## wird neu gezeichnet (terrain_changed) und steht später für Nachwachsen bereit.
+## Fells the tree on this cell: forest → grass, resource disappears. The cell
+## is redrawn (terrain_changed) and becomes available for regrowth later.
 func remove_tree(cell: Vector2i) -> void:
 	var tile := get_tile(cell)
 	tile.terrain = TileRuntimeData.TerrainType.GRASS
@@ -282,7 +288,7 @@ func remove_tree(cell: Vector2i) -> void:
 	terrain_changed.emit(cell)
 
 
-## Lässt auf einer freien Graszelle einen neuen Baum wachsen (Wald + volle Ressource).
+## Grows a new tree on a free grass cell (forest + full resource).
 func grow_tree(cell: Vector2i) -> void:
 	var tile := get_tile(cell)
 	tile.terrain = TileRuntimeData.TerrainType.FOREST
@@ -291,7 +297,7 @@ func grow_tree(cell: Vector2i) -> void:
 	terrain_changed.emit(cell)
 
 
-## Anzahl der 8 Nachbarzellen, die Wald sind (für exponentielles Baum-Nachwachsen).
+## Number of the 8 neighbor cells that are forest (for exponential tree regrowth).
 func count_forest_neighbors(cell: Vector2i) -> int:
 	var count := 0
 	for dir in NEIGHBOR_OFFSETS_8:
@@ -301,7 +307,16 @@ func count_forest_neighbors(cell: Vector2i) -> int:
 	return count
 
 
-## M19: nach dem Laden eines Spielstands die Liste aktiver Weizen-Zellen neu aufbauen.
+## M29: is there any forest left on the map at all? Early-exits on the first hit –
+## used for profession choice (only recruit a hunter if there's forest to hunt).
+func has_forest() -> bool:
+	for tile in tiles:
+		if tile.terrain == TileRuntimeData.TerrainType.FOREST:
+			return true
+	return false
+
+
+## M19: after loading a save game, rebuild the list of active wheat cells.
 func rebuild_crop_cells() -> void:
 	crop_cells.clear()
 	for y in range(MAP_SIZE.y):

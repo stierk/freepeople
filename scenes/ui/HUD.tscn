@@ -19,7 +19,6 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
 
 [node name="Row" type="HBoxContainer" parent="."]
 layout_mode = 1
@@ -65,6 +64,21 @@ text = "Stone: 0"
 layout_mode = 2
 vertical_alignment = 1
 text = "Food: 0"
+
+[node name="PolicyButton" type="Button" parent="Row"]
+layout_mode = 2
+text = "Policies"
+tooltip_text = "Open the Town Hall: set crown subsidies/tariffs and welfare."
+
+[node name="TreasuryButton" type="Button" parent="Row"]
+layout_mode = 2
+text = "Treasury"
+tooltip_text = "Open the Treasury: edit trade prices and the head tax."
+
+[node name="MarketButton" type="Button" parent="Row"]
+layout_mode = 2
+text = "Market"
+tooltip_text = "Open the Storage Yard market: trade prices and price charts."
 
 [node name="Spacer" type="Control" parent="Row"]
 layout_mode = 2

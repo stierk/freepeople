@@ -26,8 +26,11 @@ GameState="*res://scripts/autoload/GameState.gd"
 WorldGrid="*res://scripts/autoload/WorldGrid.gd"
 BuildingManager="*res://scripts/autoload/BuildingManager.gd"
 EconomyManager="*res://scripts/autoload/EconomyManager.gd"
+MarketManager="*res://scripts/autoload/MarketManager.gd"
 SimulationManager="*res://scripts/autoload/SimulationManager.gd"
+RunRecorder="*res://scripts/autoload/RunRecorder.gd"
 SaveLoadManager="*res://scripts/autoload/SaveLoadManager.gd"
+TurboRunner="*res://scripts/autoload/TurboRunner.gd"
 
 [display]
 
@@ -45,4 +48,5 @@ pointing/emulate_touch_from_mouse=true
 
 textures/canvas_textures/default_texture_filter=0
 renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true
 2d/snap_2d_transforms_to_pixel=true

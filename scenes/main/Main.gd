@@ -10,7 +10,7 @@ func _ready() -> void:
 	ui_root.build_menu.placement_selected.connect(_on_placement_selected)
 
 
-## M9: Beim Aktivieren des Platzierungsmodus das InfoPanel ausblenden.
+## M9: Hide the InfoPanel when placement mode is activated.
 func _on_placement_selected(def: BuildingDef) -> void:
 	if def != null:
 		ui_root.info_panel.hide_panel()
@@ -28,7 +28,7 @@ func _on_tile_tapped(cell: Vector2i) -> void:
 		ui_root.info_panel.show_building(building)
 		return
 
-	## M16: Bewohner anklicken zeigt Beruf + Berufswechsel-Buttons im InfoPanel.
+	## M16: Clicking an inhabitant shows profession + profession-switch buttons in the InfoPanel.
 	var inhabitant := GameState.get_inhabitant_at_cell(cell)
 	if inhabitant != null:
 		ui_root.info_panel.show_inhabitant(inhabitant)
@@ -37,7 +37,7 @@ func _on_tile_tapped(cell: Vector2i) -> void:
 	ui_root.info_panel.hide_panel()
 
 
-## M9/M11/M13: Platzierung prüfen (gesamter Footprint begehbar/frei, bezahlbar) und ausführen.
+## M9/M11/M13: check placement (entire footprint walkable/free, affordable) and execute it.
 func _try_place_building(def: BuildingDef, cell: Vector2i) -> bool:
 	if not WorldGrid.is_footprint_buildable(cell, def.footprint_size):
 		return false
@@ -49,7 +49,7 @@ func _try_place_building(def: BuildingDef, cell: Vector2i) -> bool:
 	return true
 
 
-## M13: prüft sowohl Gold- als auch Güterkosten (build_cost), bevor bezahlt wird.
+## M13: checks both gold and goods costs (build_cost) before paying.
 func _can_afford_build_cost(def: BuildingDef) -> bool:
 	if _is_first_of_type(def.type):
 		return true
