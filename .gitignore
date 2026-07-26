@@ -10,3 +10,7 @@ export.cfg
 .mono/
 data_*/
 mono_crash.*.json
+
+# Android custom build template (regenerable via Project > Install Android Build
+# Template) and its Gradle build output — huge generated .aar/.so/.aab blobs.
+android/build/
