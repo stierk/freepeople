@@ -100,15 +100,9 @@ const FOOD_CONSUMPTION_INTERVAL := DAY_LENGTH_SECONDS / 3.0
 ## (target selector in _handle_working), to start a buy-food trip. > 1 meal provides a
 ## safety cushion so they don't starve on the way to the granary.
 const FOOD_RESTOCK_THRESHOLD := 2.0
-## M27: raised from 25 to 4000 – deliberately ABOVE the new starting stock (3000, see World.gd).
-## A test run with the more obvious intermediate value 150 showed: the starting stock alone sits
-## far above any sensible threshold just above the survival line, so growth would kick in
-## practically immediately – at the cost of a cushion that's actually meant to carry the fragile
-## early food chain (farmer→mill→bakery) through its ramp-up time, not fund extra
-## mouths. Placing the threshold above the starting stock forces the settlement to have grown
-## its food stock through REAL overproduction before it grows population –
-## exactly the signal "enough food at the Town Hall", not just "not empty yet".
-const POP_GROWTH_FOOD_THRESHOLD := 4000.0
+const POP_GROWTH_FOOD_THRESHOLD := 1000.0
+## Food cost deducted from the granary for each population growth spawn.
+const POP_GROWTH_FOOD_COST := 100.0
 ## M27: stretched from 45s (< 1 game day) to 5 game days – growth noticeably decoupled from
 ## the food-check beat, so multiple inhabitants don't spawn in quick succession
 ## before the economy (build/harvest capacity) has adapted to the previous growth.
@@ -634,7 +628,7 @@ func _process_population_growth() -> void:
 	if food < POP_GROWTH_FOOD_THRESHOLD:
 		return
 
-	granary.community_stock[Goods.GoodType.FOOD] = food - 5.0
+	granary.community_stock[Goods.GoodType.FOOD] = food - POP_GROWTH_FOOD_COST
 
 	var town_hall := BuildingManager.get_town_hall()
 	var spawn_cell: Vector2i
