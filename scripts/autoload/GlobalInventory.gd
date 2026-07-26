@@ -8,7 +8,7 @@ signal resources_changed()
 signal population_changed(new_count: int)
 
 ## Gold pool of the crown (tithe income lands here)
-var gold: float = 100.0
+var gold: float = 1000.0
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ func spend_gold(amount: float) -> bool:
 
 ## M18: resets the crown's gold pool for a restart.
 func reset_state() -> void:
-	gold = 100.0
+	gold = 1000.0
 
 
 # ---------------------------------------------------------------------------
