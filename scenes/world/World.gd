@@ -227,7 +227,17 @@ func _place_start_buildings() -> void:
 	# (see docs/GAME_DESIGN.md §6) – a baseline test run with the old 0 default showed exactly
 	# this death-spiral case: inhabitants go bankrupt and starve despite a full granary,
 	# because nobody without income can buy new food.
-	town_hall.policy.basic_income = 0.0
+	#
+	# M34: this comment described the intent, but all three values below were still literally 0.0,
+	# so the safety net had never actually been live. Measured at --turbo=60 --turbo-seed=42:
+	# with 0.0 the settlement died on day 22 with 10 starvation deaths and 753 food still in the
+	# granary – gold flows one way only (eating pays crown_ask into the crown treasury; grain sells
+	# on consignment and only pays out when a buyer takes the lot), so the crown pool rose
+	# 1133 → 2100 while every inhabitant's gold hit exactly 0. With 2.0 the same seed survives to
+	# day 60 with 0 deaths. The value is a safety net, not a wage: an inhabitant eats ~2.1 food/day
+	# at base price 2.0, so 2.0 gold/day covers roughly half a day's rations and money keeps
+	# circulating instead of pooling in the treasury.
+	town_hall.policy.basic_income = 2.0
 	town_hall.policy.subsidy[Goods.GoodType.FOOD] = 0.0
 	town_hall.policy.subsidy[Goods.GoodType.STONE] = 0.0
 
