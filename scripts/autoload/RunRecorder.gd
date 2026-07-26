@@ -202,6 +202,16 @@ func sample_metrics() -> void:
 	row.append(str(bld_derelict))
 	row.append(str(bld_needs_repair))
 
+	# M34: the profession-choice signal itself, so a balance run shows WHY a trade was picked
+	# instead of only how many ended up in it. profession_scores() is deterministic (no
+	# RANDOM_TIEBREAK), so sampling it here cannot shift a seeded run. A profession that is not
+	# a candidate at all (gated on an upstream building/good) records 0.
+	var appeal := EconomyManager.profession_scores()
+	for p in InhabitantData.Profession.values():
+		row.append("%.3f" % float(appeal.get(p, 0.0)))
+	for g in Goods.GoodType.values():
+		row.append("1" if EconomyManager.is_good_scarce(g) else "0")
+
 	_metrics_buffer.append(",".join(row))
 	_trade_qty = {}  # trade volume per interval
 
@@ -226,6 +236,10 @@ func _csv_header() -> String:
 	cols.append("bld_constructed_total")
 	cols.append("bld_derelict_total")
 	cols.append("bld_needs_repair_total")
+	for p in InhabitantData.Profession.values():
+		cols.append("appeal_" + InhabitantData.Profession.keys()[p])
+	for g in Goods.GoodType.values():
+		cols.append("scarce_" + Goods.GoodType.keys()[g])
 	return ",".join(cols)
 
 

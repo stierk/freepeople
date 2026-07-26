@@ -61,9 +61,27 @@ func assign_profession_for_new_inhabitant() -> InhabitantData.Profession:
 	return pick_best_profession(InhabitantData.Profession.NONE)
 
 
-## M20: chooses the most lucrative scarce profession (urgency × price weight). `exclude`
-## skips a profession (e.g. the current one during a market-driven job switch).
+## M20/M31: chooses the most attractive profession — the crowding-adjusted appeal from
+## profession_scores() plus a small random tie-break. `exclude` skips a profession (e.g. the
+## current one during a market-driven job switch).
 func pick_best_profession(exclude: InhabitantData.Profession = InhabitantData.Profession.NONE) -> InhabitantData.Profession:
+	var scores := profession_scores(exclude)
+	var best := InhabitantData.Profession.WOODCUTTER
+	var best_score := -1.0
+	for profession: InhabitantData.Profession in scores:
+		var score: float = scores[profession] + randf() * RANDOM_TIEBREAK
+		if score > best_score:
+			best_score = score
+			best = profession
+	return best
+
+
+## M34: crowding-adjusted appeal per eligible profession, split out of pick_best_profession.
+## DELIBERATELY DETERMINISTIC — no RANDOM_TIEBREAK here — so a caller can read the pure economic
+## signal without consuming RNG and shifting a seeded run. Used by pick_best_profession, by
+## RunRecorder's appeal_* columns, and by the cross-trade reuse gate in
+## SimulationManager._handle_seeking_site.
+func profession_scores(exclude: InhabitantData.Profession = InhabitantData.Profession.NONE) -> Dictionary:
 	var storage := BuildingManager.get_storage_yard()
 	var granary := BuildingManager.get_granary()
 
@@ -115,16 +133,11 @@ func pick_best_profession(exclude: InhabitantData.Profession = InhabitantData.Pr
 	# The excluded profession (a job-switcher's current one) was already erased above, so a switcher
 	# is never penalized by the job it is leaving.
 	var counts := GameState.count_by_profession()
-
-	var best := InhabitantData.Profession.WOODCUTTER
-	var best_score := -1.0
+	var scores: Dictionary = {}
 	for profession: InhabitantData.Profession in candidates:
 		var crowding: float = 1.0 / (1.0 + CROWD_WEIGHT * float(counts.get(profession, 0)))
-		var score: float = candidates[profession] * crowding + randf() * RANDOM_TIEBREAK
-		if score > best_score:
-			best_score = score
-			best = profession
-	return best
+		scores[profession] = candidates[profession] * crowding
+	return scores
 
 
 ## M31: additive appeal of a profession = scarcity + weighted profit + idle baseline.
