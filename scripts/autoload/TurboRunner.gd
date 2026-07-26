@@ -8,7 +8,7 @@
 ## instead of hours.
 ##
 ## Usage:
-##   <godot> --headless --path "<project>" -- --turbo=1000 [--turbo-step=1.0]
+##   <godot> --headless --path "<project>" -- --turbo=1000 [--turbo-step=1.0] [--turbo-seed=42]
 ##
 ## Exit codes: 0 = reached target day with population > 0, 1 = population died out first,
 ## 2 = bad invocation (missing/invalid --turbo=).
@@ -42,6 +42,14 @@ func _ready() -> void:
 			_step_seconds = float(a.substr(13))
 		elif a == "--turbo-storage":
 			_place_storage = true
+		elif a.begins_with("--turbo-seed="):
+			# M34: seed the global RNG so a turbo run is reproducible. Without this, World.gd
+			# calls WorldGrid.generate_terrain(randi()) on an engine-autoseeded RNG, so every
+			# run gets a different map AND a different trait lottery – two runs of identical
+			# code are then not comparable, which is what made earlier balance passes rely on
+			# eyeballing variance across runs (see the M27 note in EconomyManager.gd).
+			# This must happen in an autoload's _ready(), i.e. before World._ready() draws.
+			seed(int(a.substr(13)))
 	if not _turbo_requested:
 		return
 
