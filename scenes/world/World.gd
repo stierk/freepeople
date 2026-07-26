@@ -219,7 +219,7 @@ func _place_start_buildings() -> void:
 	var town_hall := _place_building(BuildingDef.BuildingType.TOWN_HALL, center - Vector2i(1, 1))
 	town_hall.community_stock[Goods.GoodType.WOOD] = 300.0
 	town_hall.community_stock[Goods.GoodType.STONE] = 200.0
-	town_hall.community_stock[Goods.GoodType.FOOD] = 115.0
+	town_hall.community_stock[Goods.GoodType.FOOD] = 1150.0
 
 	# M27: the crown's baseline policy (uniform, applies equally to all inhabitants; as before,
 	# always changeable by the player in the Town Hall UI). Without this, the design-documented
