@@ -164,6 +164,11 @@ var build_stall_timer: float = 0.0
 ## only) – feeds the personal price ceiling in SimulationManager._willingness_to_pay. Resets on
 ## a successful purchase, or when the inhabitant leaves the state.
 var input_wait_timer: float = 0.0
+## M33: consecutive failed attempts to find a reachable resource cell (woodcutter/quarry worker).
+## At RESOURCE_STALL_RETRIES, forces a profession switch regardless of scarcity (see
+## SimulationManager._handle_gatherer_working) – otherwise a locally over-harvested hut can
+## strand its worker producing nothing, forever.
+var resource_stall_retries: int = 0
 
 var target_site_cell: Vector2i = Vector2i(-1, -1)
 var fetch_target_good: int = -1

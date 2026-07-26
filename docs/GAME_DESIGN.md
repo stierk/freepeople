@@ -191,6 +191,18 @@ The market is **decentralized**: every Storage Yard and Granary hosts a `MarketE
   above) is reset on every switch (M27), so a freshly-switched inhabitant gets a full grace window
   before being judged again, instead of inheriting an already-inflated break-even from the job they
   just left.
+- **Resource-stall bypass (M33):** the scarcity guard in the bullet above (a currently-scarce good
+  never triggers a switch, so a producer isn't judged unprofitable during a shortage) can itself
+  strand a woodcutter or quarry worker whose hut's nearby forest/stone has been fully harvested out:
+  producing nothing means the good never stops reading as scarce, so the switch never fires and the
+  inhabitant idles near the hut forever. A separate, narrower counter
+  (`InhabitantData.resource_stall_retries`, reset whenever a resource cell is found or on any
+  profession switch) counts consecutive failed on-site resource searches in
+  `SimulationManager._handle_gatherer_working`; at `RESOURCE_STALL_RETRIES = 160` failed searches in a
+  row (~2 real minutes at the existing `IDLE_RETRY_INTERVAL = 0.75s` throttle — deliberately
+  wall-clock bound rather than sim-time, so it fires regardless of game speed) it forces
+  `try_switch_unprofitable` regardless of scarcity — the same market-driven reassignment as above,
+  just with its own trigger condition.
 - **Base prices** (`Goods.BASE_PRICES`): Wood 2, Planks 4, Stone 3, Food 2, Grain 1, Flour 1.5.
 - **Crown policy — subsidy / tariff** (`PolicyData.subsidy[good]`, set at the Town Hall, applied by
   `MarketExchange._apply_subsidy`, M26): a per-good, per-unit levy on **every** producer sale
@@ -366,6 +378,14 @@ not an exact history.
   outward and raises the catch chance per outing. A path worn across forest by a woodcutter/hunter
   passing through no longer tramples the tree away (only felling does), so scouting/hunting traffic
   doesn't accidentally clear-cut the forest.
+- **M33** — Bounded resource-stall recovery: a woodcutter/quarry worker whose hut's nearby forest/
+  stone had been fully harvested out could get stuck standing near the hut forever — producing
+  nothing meant the good never registered as non-scarce, which blocked the existing unprofitability
+  switch (§6) indefinitely. Added `resource_stall_retries` (reset on any resource-cell find or
+  profession switch); at `RESOURCE_STALL_RETRIES = 160` consecutive failed searches
+  (`_handle_gatherer_working`) the inhabitant is forced through the normal
+  `try_switch_unprofitable` → `pick_best_profession` path, same mechanism as any other market-driven
+  job change.
 
 ---
 

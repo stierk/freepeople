@@ -82,7 +82,7 @@ future-reproduction notes → **[`docs/GAME_DESIGN.md` §12](docs/GAME_DESIGN.md
   (comments were translated from German in M30 — see the milestone log).
 - **Save compatibility:** enums (`GoodType`, `BuildingType`, `State`, `CropStage`, …) are serialized as
   ints. **Only append** new enum values — never reorder or insert (see the note in `goods.gd`).
-- Features are tagged with milestone markers `Mxx` (M7–M32) in comments; grep them to trace when/why
+- Features are tagged with milestone markers `Mxx` (M7–M33) in comments; grep them to trace when/why
   a system was added. A milestone log is in `docs/GAME_DESIGN.md`.
 - Tuning constants live at the top of their manager (`SimulationManager` holds most balance values:
   `DAY_LENGTH_SECONDS`, crop timers, hunger/starvation, market margins, repair, throttles).

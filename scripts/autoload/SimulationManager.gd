@@ -175,6 +175,15 @@ const REUSE_BONUS_DERELICT := 6.0
 ## scans ran every frame as long as an inhabitant found nothing to do – the main bottleneck.
 const IDLE_RETRY_INTERVAL := 0.75
 
+## M33: consecutive failed resource searches (woodcutter/quarry worker) before giving up on the
+## current spot and forcing a profession switch, bypassing the scarcity guard in
+## _check_market_profitability (a good with zero deliveries reads as permanently "scarce",
+## which would otherwise block try_switch_unprofitable forever – see _handle_gatherer_working).
+## Deliberately real-time bound like IDLE_RETRY_INTERVAL itself (~160 × 0.75s ≈ 2 real minutes),
+## not sim-time, so a stuck inhabitant gets unstuck within a bounded wall-clock wait regardless
+## of game speed.
+const RESOURCE_STALL_RETRIES := 160
+
 ## Sim seconds without build progress (no material delivered, build timer stalls), after
 ## which a stuck build is aborted: the hut remains standing as a reclaimable ruin,
 ## the inhabitant picks a new profession. Prevents someone from being stuck in the
@@ -1941,6 +1950,8 @@ func _handle_gatherer_working(inhabitant: InhabitantData, hut: BuildingInstance)
 	var terrain: TileRuntimeData.TerrainType = PROFESSION_TO_TERRAIN[inhabitant.profession]
 	var stored: float = hut.output_stock.get(good, 0.0)
 	var resource_cell := _find_resource_cell_near(hut.cell, terrain)
+	if resource_cell != Vector2i(-1, -1):
+		inhabitant.resource_stall_retries = 0
 
 	# Bring the stock from the hut to storage once a full carry load is ready
 	# or there's no resource left in reach right now. A2: also if nothing has been
@@ -1965,6 +1976,10 @@ func _handle_gatherer_working(inhabitant: InhabitantData, hut: BuildingInstance)
 		return
 
 	if resource_cell == Vector2i(-1, -1):
+		inhabitant.resource_stall_retries += 1
+		if inhabitant.resource_stall_retries >= RESOURCE_STALL_RETRIES:
+			inhabitant.resource_stall_retries = 0
+			try_switch_unprofitable(inhabitant)
 		inhabitant.idle_retry_timer = IDLE_RETRY_INTERVAL
 		return  # nothing to harvest – recheck after the throttle
 

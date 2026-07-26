@@ -121,4 +121,5 @@ func change_profession(inhabitant_id: int, new_profession: InhabitantData.Profes
 	# M21: search again immediately (don't wait for the idle throttle), so the hut freed
 	# up by the old trade is quickly reoccupied by an unemployed inhabitant.
 	inh.idle_retry_timer = 0.0
+	inh.resource_stall_retries = 0
 	inh.state = InhabitantData.State.SEEKING_SITE
