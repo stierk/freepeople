@@ -210,11 +210,17 @@ func _hut_reuse_score(b: BuildingInstance) -> int:
 ## M22: any work hut with free capacity – across professions. Covers both empty
 ## (abandoned) huts and derelict ruins. This lets homeless inhabitants take over/restore an
 ## existing hut instead of building new elsewhere. Finished/empty preferred.
-func get_reclaimable_hut() -> BuildingInstance:
+## M34: `allowed` optionally restricts the search to specific hut types (empty = no restriction,
+## the original behaviour). Taking over a hut rewrites the inhabitant's profession, so the caller
+## has to be able to keep that from silently undoing an economic decision – see
+## SimulationManager._reuse_allowed_types.
+func get_reclaimable_hut(allowed: Array = []) -> BuildingInstance:
 	var work_types: Array = PROFESSION_TO_BUILDING_TYPE.values()
 	var best: BuildingInstance = null
 	for b in buildings:
 		if not work_types.has(b.def.type) or b.occupants.size() >= b.def.max_capacity:
+			continue
+		if not allowed.is_empty() and not allowed.has(b.def.type):
 			continue
 		if best == null or _hut_reuse_score(b) > _hut_reuse_score(best):
 			best = b

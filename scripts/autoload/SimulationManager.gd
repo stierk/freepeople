@@ -170,6 +170,17 @@ const REPAIRABLE_BUILDING_TYPES := [
 const REUSE_BONUS_EMPTY := 1000.0
 const REUSE_BONUS_DERELICT := 6.0
 
+## M34: how close to the best available appeal another trade must score before its vacant hut may
+## capture a colonist. REUSE_BONUS_EMPTY (1000) is compared against score_site values in the
+## -5..-60 range, so ANY reclaimable hut always won on score, and _reassign_to_hut_profession then
+## overwrote the profession pick_best_profession had just chosen. Measured at --turbo-seed=42:
+## appeal_FARMER fell to 0.011 - the LOWEST of every profession - while 8 farmers persisted for the
+## whole 60-day run and only 1 job change happened, i.e. the score already said "stop farming" and
+## the reclaim silently ignored it. The saved build cost is real, so reuse stays; it just no longer
+## outranks the economy. HIGHER = stricter: the threshold is `best_appeal * ratio`, so raising it
+## admits fewer trades, which means more profession diversity but more huts left to fall derelict.
+const CROSS_TRADE_REUSE_RATIO := 0.6
+
 ## Minimum spacing (sim seconds) between two expensive idle searches by the same
 ## inhabitant (site search, resource/field scan). Without this throttle the
 ## scans ran every frame as long as an inhabitant found nothing to do – the main bottleneck.
@@ -1144,7 +1155,12 @@ func _handle_seeking_site(inhabitant: InhabitantData) -> void:
 		if site != Vector2i(-1, -1):
 			_start_new_build(inhabitant, site)
 			return
-		var reclaim := BuildingManager.get_reclaimable_hut()
+		# M34: prefer a hut whose trade is still economically competitive, but fall back to ANY
+		# hut rather than leaving an already-homeless inhabitant idle and starving – better
+		# employed in a mediocre trade than not at all (that is this branch's whole purpose).
+		var reclaim := BuildingManager.get_reclaimable_hut(_reuse_allowed_types(inhabitant.profession))
+		if reclaim == null:
+			reclaim = BuildingManager.get_reclaimable_hut()
 		if reclaim != null:
 			_reassign_to_hut_profession(inhabitant, reclaim)
 			_move_into_hut(inhabitant, reclaim)
@@ -1163,7 +1179,10 @@ func _handle_seeking_site(inhabitant: InhabitantData) -> void:
 	var new_cell: Vector2i = new_site["cell"]
 	var new_score: float = new_site["score"]
 
-	var reuse := BuildingManager.get_reclaimable_hut()
+	# M34: only huts of a still-competitive trade may capture a fresh colonist (see
+	# CROSS_TRADE_REUSE_RATIO). Without this filter the reuse bonus decided careers instead of
+	# breaking ties, and a stock of farm houses recycled every new spawn into FARMER forever.
+	var reuse := BuildingManager.get_reclaimable_hut(_reuse_allowed_types(inhabitant.profession))
 	if reuse != null:
 		var prof := BuildingManager.profession_for_building_type(reuse.def.type)
 		var bonus: float = REUSE_BONUS_EMPTY if reuse.is_constructed else REUSE_BONUS_DERELICT
@@ -1188,6 +1207,32 @@ func _move_into_hut(inhabitant: InhabitantData, hut: BuildingInstance) -> void:
 	inhabitant.path = WorldGrid.find_path(inhabitant.cell, hut.cell)
 	inhabitant.path_index = 0
 	inhabitant.state = InhabitantData.State.MOVING_TO_BUILD
+
+
+## M34: which hut types a colonist may take over, given the profession they just picked. Taking
+## over a hut rewrites the profession (_reassign_to_hut_profession), so an unfiltered search lets
+## the reuse bonus overrule the economy entirely. A trade qualifies if its crowding-adjusted appeal
+## is still within CROSS_TRADE_REUSE_RATIO of the best trade on offer; the colonist's own trade
+## always qualifies. Reads the deterministic EconomyManager.profession_scores(), so this consumes
+## no RNG and cannot shift a seeded run.
+func _reuse_allowed_types(chosen: InhabitantData.Profession) -> Array:
+	var scores := EconomyManager.profession_scores()
+	var allowed: Array = []
+	if BuildingManager.PROFESSION_TO_BUILDING_TYPE.has(chosen):
+		allowed.append(BuildingManager.PROFESSION_TO_BUILDING_TYPE[chosen])
+	var best := 0.0
+	for profession: InhabitantData.Profession in scores:
+		best = maxf(best, scores[profession])
+	var threshold: float = best * CROSS_TRADE_REUSE_RATIO
+	for profession: InhabitantData.Profession in scores:
+		if scores[profession] < threshold:
+			continue
+		if not BuildingManager.PROFESSION_TO_BUILDING_TYPE.has(profession):
+			continue
+		var type: BuildingDef.BuildingType = BuildingManager.PROFESSION_TO_BUILDING_TYPE[profession]
+		if not allowed.has(type):
+			allowed.append(type)
+	return allowed
 
 
 ## Adjusts the inhabitant's profession to the taken-over trade (if the hut is a workplace).
