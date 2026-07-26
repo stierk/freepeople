@@ -42,7 +42,7 @@ func add_inhabitant(spawn_cell: Vector2i) -> InhabitantData:
 	inh.gold = 100.0
 	# M22: small starting food stock, so a freshly spawned inhabitant doesn't starve
 	# before they manage their first buy-food trip to the granary.
-	inh.inventory[Goods.GoodType.FOOD] = 30.0
+	inh.inventory[Goods.GoodType.FOOD] = 3.0
 	inh.margin = randf()  # M20: personal price margin [0,1] (= greed trait, see M28)
 	inh.job_check_factor = randf()  # personal profession-switch check interval (× 10 days)
 	# M28: evolutionary traits – random at spawn. Each has a benefit and a drawback, see
