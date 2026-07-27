@@ -561,6 +561,48 @@ not an exact history.
   whole run even at zero stock, so scarcity never reached profession scoring in time for anyone to
   become a woodcutter while Wood was still buildable-with.
 
+  **Hunters and woodcutters working their own hut.** Second M35 symptom, same run: hunters and
+  woodcutters stand next to their hut flipping `WORKING` ↔ `HUNTING`/`GATHERING` every frame
+  without ever moving. Counted at seed 42 over 40 days: **4017 of 4041 hunt legs and 848 of 852
+  gather legs** aborted without a single step taken.
+
+  Huts are routinely built directly onto forest — `is_footprint_buildable` only rejects water and
+  occupied cells, and `SiteSelection` deliberately seeks forest proximity — and the terrain under a
+  hut stays `FOREST`. `_tile_huntable` and `_find_resource_cell_near` tested terrain and
+  cooldown/`resource_amount` but never `building_id`, so a worker's own hut, at distance 0, won the
+  nearest-cell search every time. Because a building footprint is solid in A\*,
+  `WorldGrid.find_path` resolved it to a neighbour (`_resolve_walkable_target`) and returned a path
+  of length 1 — the cell the worker already stood on. They "arrived", the on-site handler saw
+  `cell != gather_target_cell`, bounced back to `WORKING`, and picked the same cell again. The trip
+  never completed, so the hunting cooldown was never set and the tree never felled: the loop was
+  self-sustaining.
+
+  Two fixes, both in `SimulationManager`:
+  - `_tile_workable()` — a work target must be free of buildings (any hut, not just one's own).
+    A path across a **forest** tile disqualifies it too; worn desire paths already convert forest to
+    grass (M32) and regrowth skips path cells, so that half is a consistency guard covering
+    pre-M32 saves. Non-forest resources are exempt: a track worn to a quarry face does not remove
+    the stone. Wired into `_tile_huntable`, `_find_resource_cell_near` and `_handle_gathering`'s
+    on-arrival re-check.
+  - `_path_reaches()` — `_start_hunt_leg`/`_start_gather_leg` now return `bool` and only enter
+    `HUNTING`/`GATHERING` when the route provably ends on the target cell; otherwise they throttle
+    via `idle_retry_timer` and stay in `WORKING`. This is the backstop for every *other*
+    unreachable target (forest across water, a cell walled in by huts), which would otherwise spin
+    the identical busy loop. Mid-trip, a hunter who cannot reach the next cell now hauls their
+    catch home instead of standing.
+
+  Effect at seed 42: 0 broken legs on both seeds; hunt legs 4041 → 441 in 40 days, all of them
+  real work. Food at day 60 451 → 791 (seed 42) and 430 → 703 (seed 7), Wood at day 40
+  17.7 → 99.6 and rising instead of collapsing, population peaking at 13 instead of a flat 11.
+
+  > **New pressure, not yet addressed.** Real production moved gold the other way: inhabitant gold
+  > at day 40 rose 504 → 2021 while the Crown treasury fell 1488 → **0** by day 60 on seed 42 (the
+  > crown backstop now actually buys the goods being produced, and `basic_income = 2.0` is paid to
+  > a larger population). The seed-42 run ends with **2 starvation deaths** between day 45 and 60,
+  > where it previously had none — an empty treasury cannot pay the safety net. Seed 7 still ends
+  > at 770.5 with 0 deaths. This is the M34 "capital formation" note reappearing from the other
+  > side and wants a balance pass, not another bug fix.
+
 ---
 
 ## 12. Evolutionary traits (M28)

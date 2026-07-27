@@ -2000,6 +2000,47 @@ func _handle_farm_tending(inhabitant: InhabitantData) -> void:
 
 
 # ---------------------------------------------------------------------------
+# M35: shared preconditions for on-site work (woodcutter/quarry worker/hunter)
+# ---------------------------------------------------------------------------
+## Can a worker actually stand on this cell and work it?
+##
+## A cell carrying a building is **solid in A\*** (`WorldGrid.set_building_footprint`), so it can
+## never be reached — and huts are routinely built straight onto forest (`is_footprint_buildable`
+## only rejects water and already-occupied cells, and site selection deliberately hunts for forest
+## proximity). The terrain under a hut stays FOREST, so without this check a hunter's or
+## woodcutter's own tent scored as the nearest prey/tree at distance 0 and won the search every
+## single time: `find_path` silently redirected to a neighbouring cell, the worker "arrived" one
+## tile off, the on-site handler saw `cell != target` and bounced back to WORKING — a per-frame
+## busy loop that never set the hunting cooldown or felled the tree, so the same cell won again
+## forever. Measured before this check: 4017 of 4041 hunt legs and 848 of 852 gather legs aborted
+## that way (seed 42, 40 days).
+##
+## A path across a **forest** tile disqualifies it too: worn desire paths already convert forest to
+## grass (M32, `WorldGrid.register_step`) and tree regrowth skips path cells, so this is a
+## consistency guard rather than a live case — it also covers saves written before M32. Non-forest
+## resources are deliberately unaffected: a track worn to a quarry face does not remove the stone.
+func _tile_workable(tile: TileRuntimeData) -> bool:
+	if tile.building_id != -1:
+		return false
+	if tile.terrain == TileRuntimeData.TerrainType.FOREST \
+			and tile.path_type != TileRuntimeData.PathType.NONE:
+		return false
+	return true
+
+
+## Does this path actually end on `target`? `WorldGrid.find_path` resolves an unreachable or solid
+## target to a neighbour (`_resolve_walkable_target`) and returns an empty path when there is no
+## route at all. In both cases the walker arrives somewhere else and the on-site handler bounces
+## straight back to WORKING. `_tile_workable` removes the common cause (buildings), but any other
+## unreachable target — a forest patch across water, a cell walled in by huts — would spin the
+## same loop, so a leg is only started when the route provably lands on the target cell.
+func _path_reaches(path: PackedVector2Array, target: Vector2i) -> bool:
+	if path.is_empty():
+		return false
+	return WorldGrid.world_to_cell(path[path.size() - 1]) == target
+
+
+# ---------------------------------------------------------------------------
 # On-site resource harvesting – woodcutter/quarry worker walk to the resource, harvest
 # it and carry it to their own hut (analogous to the farmer on the field).
 # ---------------------------------------------------------------------------
@@ -2046,11 +2087,22 @@ func _handle_gatherer_working(inhabitant: InhabitantData, hut: BuildingInstance)
 		inhabitant.idle_retry_timer = IDLE_RETRY_INTERVAL
 		return  # nothing to harvest – recheck after the throttle
 
+	_start_gather_leg(inhabitant, resource_cell, terrain)
+
+
+## M35: sends the gatherer to a resource cell. Returns false (and leaves the state alone, merely
+## throttled) if no route actually reaches the cell – see _path_reaches.
+func _start_gather_leg(inhabitant: InhabitantData, resource_cell: Vector2i, terrain: TileRuntimeData.TerrainType) -> bool:
+	var path := WorldGrid.find_path(inhabitant.cell, resource_cell)
+	if not _path_reaches(path, resource_cell):
+		inhabitant.idle_retry_timer = IDLE_RETRY_INTERVAL
+		return false
 	inhabitant.gather_target_cell = resource_cell
 	inhabitant.work_timer = WOOD_CUT_TIME if terrain == TileRuntimeData.TerrainType.FOREST else STONE_MINE_TIME
-	inhabitant.path = WorldGrid.find_path(inhabitant.cell, resource_cell)
+	inhabitant.path = path
 	inhabitant.path_index = 0
 	inhabitant.state = InhabitantData.State.GATHERING
+	return true
 
 
 ## Walks to the resource and harvests it on-site. The harvest timer only runs while the
@@ -2073,7 +2125,7 @@ func _handle_gathering(inhabitant: InhabitantData, delta: float) -> void:
 		_reset_gathering(inhabitant)
 		return
 	var tile := WorldGrid.get_tile(cell)
-	if tile.terrain != terrain or tile.resource_amount <= 0.0:
+	if tile.terrain != terrain or tile.resource_amount <= 0.0 or not _tile_workable(tile):
 		_reset_gathering(inhabitant)
 		return
 
@@ -2151,6 +2203,9 @@ func _reset_gathering(inhabitant: InhabitantData) -> void:
 func _tile_huntable(tile: TileRuntimeData) -> bool:
 	if tile.terrain != TileRuntimeData.TerrainType.FOREST:
 		return false
+	# M35: a hut's own footprint is unreachable (solid in A*) even though its terrain stays FOREST.
+	if not _tile_workable(tile):
+		return false
 	if tile.last_hunted_day < 0:
 		return true
 	return get_current_day() - tile.last_hunted_day >= HUNT_REPLENISH_DAYS
@@ -2210,13 +2265,21 @@ func _handle_hunter_working(inhabitant: InhabitantData, hut: BuildingInstance) -
 	_start_hunt_leg(inhabitant, prey_cell)
 
 
-## Sends the hunter to a forest cell to hunt (one leg of a roaming trip).
-func _start_hunt_leg(inhabitant: InhabitantData, prey_cell: Vector2i) -> void:
+## Sends the hunter to a forest cell to hunt (one leg of a roaming trip). M35: returns false
+## (and leaves the state alone, merely throttled) if no route actually reaches the cell – see
+## _path_reaches. The caller decides what to do instead: stay in WORKING and retry after the
+## throttle, or – mid-trip with loot in hand – head home.
+func _start_hunt_leg(inhabitant: InhabitantData, prey_cell: Vector2i) -> bool:
+	var path := WorldGrid.find_path(inhabitant.cell, prey_cell)
+	if not _path_reaches(path, prey_cell):
+		inhabitant.idle_retry_timer = IDLE_RETRY_INTERVAL
+		return false
 	inhabitant.gather_target_cell = prey_cell
 	inhabitant.work_timer = HUNT_TIME
-	inhabitant.path = WorldGrid.find_path(inhabitant.cell, prey_cell)
+	inhabitant.path = path
 	inhabitant.path_index = 0
 	inhabitant.state = InhabitantData.State.HUNTING
+	return true
 
 
 ## Walks to the forest cell and hunts there. The yield is only rolled at the end; only then is
@@ -2281,8 +2344,9 @@ func _roam_or_return(inhabitant: InhabitantData, hut: BuildingInstance) -> void:
 
 	if not load_full and not budget_spent:
 		var next_cell := _find_huntable_cell_near(hut.cell)
-		if next_cell != Vector2i(-1, -1):
-			_start_hunt_leg(inhabitant, next_cell)
+		# M35: an unreachable next cell ends the trip instead of restarting it – falling through
+		# hauls the catch home rather than leaving the hunter standing.
+		if next_cell != Vector2i(-1, -1) and _start_hunt_leg(inhabitant, next_cell):
 			return
 
 	# Trip over: haul the catch home, or – if empty-handed – idle briefly and retry later.
@@ -2349,6 +2413,9 @@ func _find_resource_cell_near(origin: Vector2i, terrain: TileRuntimeData.Terrain
 				continue
 			var tile := WorldGrid.get_tile(cell)
 			if tile.terrain != terrain or tile.resource_amount <= 0.0:
+				continue
+			# M35: skip cells a worker can never stand on (own/other huts) – see _tile_workable.
+			if not _tile_workable(tile):
 				continue
 			var dist := dx * dx + dy * dy
 			if dist < best_dist:
