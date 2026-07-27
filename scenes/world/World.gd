@@ -312,6 +312,14 @@ func _transfer_town_hall_stock(instance: BuildingInstance) -> void:
 		if amount > 0.0:
 			town_hall.community_stock[good] = 0.0
 			instance.community_stock[good] = instance.community_stock.get(good, 0.0) + amount
+		# M34: carry the crown's prices over with the stock. The Town Hall has had its own
+		# TradeData since M34, so without this a player who tuned e.g. the food price would
+		# silently lose that policy the moment they built the Granary that takes the stock over.
+		if town_hall.trade_data != null and instance.trade_data != null:
+			instance.trade_data.buy_price[good] = town_hall.trade_data.buy_price.get(
+				good, Goods.BASE_PRICES.get(good, 1.0))
+			instance.trade_data.sell_price[good] = town_hall.trade_data.sell_price.get(
+				good, Goods.BASE_PRICES.get(good, 1.0))
 
 
 func _spawn_initial_inhabitants() -> void:

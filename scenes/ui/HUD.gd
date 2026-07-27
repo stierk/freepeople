@@ -43,7 +43,12 @@ func _ready() -> void:
 	restart_confirm_dialog.confirmed.connect(_on_restart_confirmed)
 
 	# M26: economy quick-access buttons. Policy lives at the Town Hall, tax/prices at the Treasury,
-	# the trade table + price chart at the Storage Yard (starter exchange, always exists).
+	# the trade table + price chart at the Storage Yard.
+	# M34: get_storage_yard() falls back to the Town Hall, which used to have no TradeData — so
+	# before a Storage Yard was built this button opened a panel with no trade table at all. The
+	# Town Hall now has one, so it works from day one. Remaining gap: once a Storage Yard exists the
+	# fallback stops and this button shows wood/planks/stone only, i.e. food prices are then only
+	# reachable by clicking the Granary/Town Hall directly.
 	policy_button.pressed.connect(func() -> void: building_info_requested.emit(BuildingManager.get_town_hall()))
 	treasury_button.pressed.connect(func() -> void: building_info_requested.emit(BuildingManager.get_treasury()))
 	market_button.pressed.connect(func() -> void: building_info_requested.emit(BuildingManager.get_storage_yard()))

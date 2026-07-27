@@ -275,6 +275,11 @@ func _deserialize_building(entry: Dictionary) -> BuildingInstance:
 		td.sell_price = _intify_keys(td_entry.get("sell_price", {}))
 		td.daily_tax = td_entry.get("daily_tax", 0.0)
 		b.trade_data = td
+	elif b.def.type == BuildingDef.BuildingType.TOWN_HALL:
+		# M34: save games written before the Town Hall had TradeData would restore it as null,
+		# making a loaded world behave differently from a fresh one. Same shape as the policy
+		# fallback below. Defaults come from BASE_PRICES, i.e. the pre-M34 fixed-average behaviour.
+		b.trade_data = TradeData.new()
 
 	# M20: restore Town Hall policy (or create fresh for old save games).
 	if entry.has("policy"):
@@ -294,7 +299,7 @@ func _deserialize_building(entry: Dictionary) -> BuildingInstance:
 		b.exchange = MarketExchange.new()
 		b.exchange.setup(b, BuildingManager.GRANARY_GOODS)
 	elif b.def.type == BuildingDef.BuildingType.TOWN_HALL:
-		# Town Hall = storage yard + granary in one (fixed average price, no TradeData).
+		# Town Hall = storage yard + granary in one (M34: with TradeData, restored above).
 		b.exchange = MarketExchange.new()
 		b.exchange.setup(b, BuildingManager.TOWN_HALL_GOODS)
 

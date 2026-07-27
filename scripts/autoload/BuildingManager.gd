@@ -77,14 +77,22 @@ func register_building(def: BuildingDef, cell: Vector2i) -> BuildingInstance:
 	elif def.type == BuildingDef.BuildingType.GRANARY:
 		instance.exchange = MarketExchange.new()
 		instance.exchange.setup(instance, GRANARY_GOODS)
-	# The Town Hall acts as storage yard + granary in one: its own exchange across all
-	# goods, but NO TradeData. This keeps floor == ceil == base price, so it buys and
-	# sells at a fixed average price and has no adjustable min/max bounds.
+	# The Town Hall acts as storage yard + granary in one: its own exchange across all goods.
 	# It additionally carries the global economic policy (subsidy/tariff, basic income).
+	# M34: it now also gets TradeData. It used to be denied one deliberately, to keep
+	# floor == ceil == base price — but since Storage Yard/Granary are player-placeable only
+	# (GAME_DESIGN §5), the Town Hall is the ONLY exchange an unattended run will ever have, so
+	# withholding it meant the settlement had no reachable price lever at all and crown_ask/crown_bid
+	# stayed pinned to BASE_PRICES forever (which also capped every producer lot via
+	# _seller_offer_price). TradeData._init seeds both prices from BASE_PRICES, so the fixed-average
+	# behaviour the old comment describes still holds at defaults — it is simply no longer mandatory.
+	# NOTE: deliberately NOT added to TRADE_BUILDING_TYPES — Main.gd uses that array for
+	# "first building of this type is free", and the Town Hall is not player-placeable.
 	elif def.type == BuildingDef.BuildingType.TOWN_HALL:
 		instance.exchange = MarketExchange.new()
 		instance.exchange.setup(instance, TOWN_HALL_GOODS)
 		instance.policy = PolicyData.new()
+		instance.trade_data = TradeData.new()
 	buildings.append(instance)
 	return instance
 
@@ -261,11 +269,15 @@ func get_daily_tax() -> float:
 	return 0.0
 
 
-## M20: all exchanges (storage/granary) that carry a specific good.
+## M20: all exchanges that carry a specific good.
+## M34: capability check instead of the old type-only filter (GRANARY xor STORAGE_YARD), which had
+## no Town Hall fallback even though get_granary()/get_storage_yard() both have one. Since both of
+## those buildings are player-placeable only, an unattended run has nothing but the Town Hall — so
+## get_market_price() returned the flat BASE_PRICE forever, which pinned the profit term in
+## EconomyManager._appeal at exactly 0 for every good (observed: price_FOOD = 2.00 on every row of
+## every recorded run). Mirrors MarketManager._market_buildings(), which already includes the Town Hall.
 func get_all_storages_for_good(good: int) -> Array:
-	var is_food: bool = good in GRANARY_GOODS
-	var type := BuildingDef.BuildingType.GRANARY if is_food else BuildingDef.BuildingType.STORAGE_YARD
-	return get_buildings_by_type(type).filter(func(b): return b.exchange != null)
+	return buildings.filter(func(b): return b.exchange != null and b.exchange.goods.has(good))
 
 
 ## M20: average current market price of a good across all exchanges

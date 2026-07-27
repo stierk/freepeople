@@ -30,6 +30,11 @@ var _turbo_requested := false
 ## Town Hall as possible right after bootstrap – simulates a foresightful player's
 ## opening move for a balance test (see the storage-near-townhall scenario).
 var _place_storage := false
+## When >= 0 (--turbo-food-price=<x>), the crown's FOOD Sell price is set to <x> right after
+## bootstrap – the headless equivalent of a player moving that stepper in the Town Hall UI.
+## Exists to verify that the price lever actually reaches profession scoring (M34): the appeal of
+## the FOOD professions must rise by PROFIT_WEIGHT * (x / BASE_PRICES[FOOD] - 1).
+var _food_price := -1.0
 
 
 func _ready() -> void:
@@ -42,6 +47,8 @@ func _ready() -> void:
 			_step_seconds = float(a.substr(13))
 		elif a == "--turbo-storage":
 			_place_storage = true
+		elif a.begins_with("--turbo-food-price="):
+			_food_price = float(a.substr(19))
 		elif a.begins_with("--turbo-seed="):
 			# M34: seed the global RNG so a turbo run is reproducible. Without this, World.gd
 			# calls WorldGrid.generate_terrain(randi()) on an engine-autoseeded RNG, so every
@@ -85,6 +92,13 @@ func _wait_for_bootstrap() -> void:
 	SimulationManager.speed_mode = SimulationManager.SpeedMode.NORMAL
 	if _place_storage:
 		_place_storage_near_townhall()
+	if _food_price >= 0.0:
+		var th := BuildingManager.get_town_hall()
+		if th != null and th.trade_data != null:
+			th.trade_data.sell_price[Goods.GoodType.FOOD] = _food_price
+			print("[Turbo] crown FOOD Sell price set to %.2f" % _food_price)
+		else:
+			push_error("[Turbo] --turbo-food-price: Town Hall has no TradeData")
 	print("[Turbo] bootstrap ready (pop=%d), stepping..." % GameState.population_count())
 	_run_loop()
 
