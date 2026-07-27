@@ -97,6 +97,10 @@ func offer(good: int, quantity: float, seller) -> float:
 		var ask := _seller_offer_price(good, seller)
 		_add_lot(good, ask, accepted, seller.id)
 		history.record(good, MarketHistory.Kind.OFFER, ask)
+		# M34: domestic production, for EconomyManager's flow-based urgency. Deliberately only
+		# when there IS a seller – ownerless crown remainder is stock appearing, not the settlement
+		# producing, and counting it would mask exactly the deficit urgency is meant to detect.
+		EconomyManager.note_production(good, accepted)
 	# seller == null: goods remain ownerless crown remainder (no lot).
 	return accepted
 
@@ -115,6 +119,8 @@ func sell_to_crown_now(good: int, quantity: float, seller) -> float:
 	owner.community_stock[good] = owner.community_stock.get(good, 0.0) + accepted
 	history.record(good, MarketHistory.Kind.DEAL, price)
 	RunRecorder.record_trade(good, accepted)
+	if seller != null:
+		EconomyManager.note_production(good, accepted)  # M34: see offer()
 	var payout := minf(price * accepted, GlobalInventory.gold)
 	if payout > 0.0 and GlobalInventory.spend_gold(payout) and seller != null:
 		seller.gold += payout
@@ -229,6 +235,9 @@ func _purchase(good: int, want: float, payer, limit_to_budget: bool, max_price: 
 		want -= q
 	if taken > 0.0:
 		owner.community_stock[good] = stock - taken
+		# M34: booked once per purchase, not inside the per-lot loop above – `taken` is already the
+		# summed amount that actually left community stock.
+		EconomyManager.note_consumption(good, taken)
 	return {"taken": taken, "cost": cost}
 
 

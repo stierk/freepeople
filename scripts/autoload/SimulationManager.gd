@@ -377,6 +377,9 @@ func _process(delta: float) -> void:
 		return
 	var sim_delta := delta * mult
 	sim_time += sim_delta
+	# M34: rotate the production/consumption window on SIM time, so it always spans the same
+	# number of game days regardless of the speed setting.
+	EconomyManager.advance_flow_clock(sim_delta)
 
 	var t := Time.get_ticks_usec()
 	_process_buildings(sim_delta)
@@ -649,6 +652,10 @@ func _process_population_growth() -> void:
 		return
 
 	granary.community_stock[Goods.GoodType.FOOD] = food - POP_GROWTH_FOOD_COST
+	# M34: this withdrawal bypasses the exchange, so EconomyManager's flow tracker would never see
+	# it. Booked as measured (not installed) demand on purpose – growth is discretionary, and
+	# folding it into the analytic per-inhabitant appetite would roughly double it.
+	EconomyManager.note_consumption(Goods.GoodType.FOOD, POP_GROWTH_FOOD_COST)
 
 	var town_hall := BuildingManager.get_town_hall()
 	var spawn_cell: Vector2i

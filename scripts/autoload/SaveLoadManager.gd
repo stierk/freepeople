@@ -36,6 +36,9 @@ func restart_game() -> void:
 	GameState.reset_state()
 	BuildingManager.reset_state()
 	SimulationManager.reset_state()
+	# M34: autoload state survives reload_current_scene(), so without this the new run would
+	# inherit the previous one's production/consumption history.
+	EconomyManager.reset_state()
 	# Fresh recording files for the new run (the previous run gets flushed).
 	RunRecorder.start_new_run()
 
@@ -51,6 +54,7 @@ func save_game() -> void:
 		"sim_time": SimulationManager.sim_time,
 		"speed_mode": SimulationManager.speed_mode,
 		"gold": GlobalInventory.gold,
+		"flow": EconomyManager.serialize_flow(),  # M34
 		"next_building_id": BuildingManager.get_next_id(),
 		"next_inhabitant_id": GameState.get_next_inhabitant_id(),
 		"tiles": _serialize_tiles(),
@@ -185,6 +189,8 @@ func _deserialize(data: Dictionary) -> void:
 	SimulationManager.speed_mode = data.get("speed_mode", SimulationManager.SpeedMode.NORMAL) as SimulationManager.SpeedMode
 
 	GlobalInventory.gold = data.get("gold", 100.0)
+	# M34: absent in pre-M34 saves – restore_flow({}) just leaves an empty window.
+	EconomyManager.restore_flow(data.get("flow", {}))
 
 	_deserialize_tiles(data.get("tiles", []))
 	WorldGrid.setup_astar()

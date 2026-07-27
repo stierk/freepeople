@@ -1,31 +1,48 @@
 extends Node
 
-## M27: TARGET_FOOD raised from 20 to 80. A turbo test run showed: with the old, low
-## target, urgency (_urgency) for BAKER stayed near 0 as long as the stock (which rests on
-## an initial cushion for a long time) stayed above 20 – the profession only got picked once
-## the stock was nearly exhausted (too late: building a bakery + accumulating flour takes several
-## days of lead time that were then missing). A higher target makes BAKER attractive much earlier.
-## M27: raised further from 80 to 120 – a series of turbo test runs (identical code,
-## only different random starting conditions) still showed variance in how early the
-## BAKER profession becomes attractive enough to be staffed stably; a higher target shifts the
-## urgency threshold even earlier, before the food buffer becomes critical.
-const TARGET_FOOD := 120.0
-const TARGET_GRAIN := 15.0
-const TARGET_FLOUR := 15.0
-const TARGET_WOOD := 10.0
-const TARGET_PLANKS := 10.0
-const TARGET_STONE := 10.0
+## M34: the fixed TARGET_* stock levels are gone. Measuring "instantaneous stock vs. a constant"
+## was wrong in BOTH directions and produced the observed roster freeze:
+##   - GRAIN/FLOUR are intermediates. Whether their stock is 0 or 500 says nothing about whether
+##     anyone needs more — a mill eating grain as fast as it arrives looks identical to no farmers
+##     at all.
+##   - FOOD sat at 1150 against TARGET_FOOD = 120, so `scarce_FOOD` read 0 on every row of a
+##     60-day run while the stock drained 1138 → 221 with zero domestic production. A large pile
+##     with no producers is not abundance.
+## Urgency is now demand-relative: how far short of actual demand production is running
+## (flow), and how many days of cover the stock represents (cover). See urgency_of().
 
-## M31: stock target per good (mirrors the per-profession TARGET_* above), so a profitability
-## check can tell whether a good is currently scarce (needed) vs. glutted. See is_good_scarce().
-const GOOD_TARGETS := {
-	Goods.GoodType.GRAIN: TARGET_GRAIN,
-	Goods.GoodType.WOOD: TARGET_WOOD,
-	Goods.GoodType.STONE: TARGET_STONE,
-	Goods.GoodType.FLOUR: TARGET_FLOUR,
-	Goods.GoodType.FOOD: TARGET_FOOD,
-	Goods.GoodType.PLANKS: TARGET_PLANKS,
+## How many days of consumption the stock should cover before a good counts as comfortable.
+const TARGET_COVER_DAYS := 4.0
+## Weight of the flow term. Below 1.0 so a pure production deficit tops out short of 1.0 and an
+## imminent stock-out (the cover term) can still outrank it.
+const FLOW_WEIGHT := 0.8
+## Absolute floor buffer for goods with intrinsic terminal demand, used only while measured and
+## installed demand are still ~0 (world start). Deliberately NOT applied to pure intermediates:
+## giving GRAIN/FLOUR a constant fallback target is exactly what pinned FARMER/MILLER at urgency
+## 1.0 with an empty buffer nobody was waiting on.
+const TERMINAL_MIN_BUFFER := {
+	Goods.GoodType.WOOD: 10.0,
+	Goods.GoodType.STONE: 10.0,
+	Goods.GoodType.FOOD: 20.0,
 }
+## An input good inherits this share of its downstream good's urgency, so the food chain staffs
+## itself back-to-front from real end-product scarcity while the direct producer of the scarce
+## good always stays strictly more attractive.
+const CHAIN_PROPAGATION := 0.7
+const DOWNSTREAM_GOOD := {
+	Goods.GoodType.GRAIN: Goods.GoodType.FLOUR,
+	Goods.GoodType.FLOUR: Goods.GoodType.FOOD,
+}
+## Above this urgency a good counts as genuinely scarce (is_good_scarce → the retention guard in
+## SimulationManager._check_market_profitability). Deliberately between "merely derived interest"
+## (a chain-propagated 0.7 × 0.8 = 0.56, then 0.39 two stages up) and "own flow deficit"
+## (FLOW_WEIGHT = 0.8), so the guard protects a producer whose good is actually in deficit and
+## never one whose good is only fashionable upstream.
+const SCARCE_URGENCY_THRESHOLD := 0.5
+## Over how many game days an unfinished building's outstanding material cost is spread when it is
+## counted as demand. Longer = construction competes less with the food chain for labour. Tuned by
+## sweep at --turbo-seed=42; see _installed_demand_rate.
+const BUILD_DEMAND_DAYS := 4.0
 
 const RANDOM_TIEBREAK := 0.15
 
@@ -45,16 +62,22 @@ const CROWD_WEIGHT := 0.5     # per-existing-worker penalty (~halves a professio
 ## (farmer→miller→baker) stays preferred at equal scarcity and hunting complements it instead
 ## of displacing it. Early in the game (no bakery yet) the hunter is still the obvious
 ## food source, because BAKER isn't a candidate at all then.
+## M34: applied to the URGENCY term only, no longer to the whole appeal. Multiplying the whole
+## appeal also shrank IDLE_BASELINE to 0.12, which made HUNTER the only profession whose floor sat
+## BELOW the 0.15 RANDOM_TIEBREAK — a lottery it was rigged to lose (measured: 0 hunters in 41
+## days, appeal_HUNTER 0.080 vs 0.150 for everyone else). The intent was always "at equal food
+## scarcity prefer the reliable chain", i.e. a scarcity tilt, not a floor penalty.
 const HUNT_FOOD_WEIGHT := 0.8
 
 ## M31: GRAIN is only useful once a mill consumes it (farmer→miller→baker). Before any WINDMILL
 ## exists, farming is premature: raw grain has no consumer and sells to the crown for less than the
 ## FOOD a farmer must buy, so a settlement of pure grain-farmers bankrupts itself while nobody
-## produces food. This factor damps FARMER appeal until a mill stands, so early labor flows to food
-## producers (hunter needs only forest). It is NOT zero — a few farmers still spawn, build farmer
-## huts, and thereby let millers (and then a windmill) be recruited, which lifts the damping and
-## lets farming scale up once grain actually has demand.
-const FARMER_NO_CHAIN_FACTOR := 0.35
+## produces food.
+## M34: the explicit FARMER_NO_CHAIN_FACTOR is gone. demand_rate(GRAIN) is 0 while no windmill is
+## constructed, so grain's own urgency is already 0 and FARMER is left with only the chain-
+## propagated share of FLOUR/FOOD urgency — the same damping, but continuous and self-lifting as
+## mills appear, instead of a hard constant. Keeping both would have double-damped farming and
+## re-broken the chain the way M27 describes.
 
 
 func assign_profession_for_new_inhabitant() -> InhabitantData.Profession:
@@ -82,13 +105,7 @@ func pick_best_profession(exclude: InhabitantData.Profession = InhabitantData.Pr
 ## RunRecorder's appeal_* columns, and by the cross-trade reuse gate in
 ## SimulationManager._handle_seeking_site.
 func profession_scores(exclude: InhabitantData.Profession = InhabitantData.Profession.NONE) -> Dictionary:
-	var storage := BuildingManager.get_storage_yard()
 	var granary := BuildingManager.get_granary()
-
-	var wood: float = storage.community_stock.get(Goods.GoodType.WOOD, 0.0)
-	var planks: float = storage.community_stock.get(Goods.GoodType.PLANKS, 0.0)
-	var stone: float = storage.community_stock.get(Goods.GoodType.STONE, 0.0)
-	var food: float = granary.community_stock.get(Goods.GoodType.FOOD, 0.0)
 	var grain: float = granary.community_stock.get(Goods.GoodType.GRAIN, 0.0)
 	var flour: float = granary.community_stock.get(Goods.GoodType.FLOUR, 0.0)
 
@@ -97,15 +114,10 @@ func profession_scores(exclude: InhabitantData.Profession = InhabitantData.Profe
 	# is actually producing (an occupied farmer/mill). This way the chain doesn't break when
 	# the input buffer briefly drops to 0, but no idle mills/bakeries still spring up
 	# without any previous stage at all.
-	# M31: damp FARMER until grain has a downstream consumer (a WINDMILL/mill exists), so the
-	# settlement doesn't start as pure grain-farmers producing an intermediate nobody eats.
-	var farmer_appeal := _appeal(grain, TARGET_GRAIN, Goods.GoodType.GRAIN)
-	if not BuildingManager.has_building_of_type(BuildingDef.BuildingType.WINDMILL):
-		farmer_appeal *= FARMER_NO_CHAIN_FACTOR
 	var candidates := {
-		InhabitantData.Profession.FARMER: farmer_appeal,
-		InhabitantData.Profession.WOODCUTTER: _appeal(wood, TARGET_WOOD, Goods.GoodType.WOOD),
-		InhabitantData.Profession.QUARRY_WORKER: _appeal(stone, TARGET_STONE, Goods.GoodType.STONE),
+		InhabitantData.Profession.FARMER: _appeal(Goods.GoodType.GRAIN),
+		InhabitantData.Profession.WOODCUTTER: _appeal(Goods.GoodType.WOOD),
+		InhabitantData.Profession.QUARRY_WORKER: _appeal(Goods.GoodType.STONE),
 	}
 	# M27: has_building_of_type() instead of has_active_producer() – the latter requires a hut
 	# occupied at EXACTLY this instant, which was a timing problem with frequent profession
@@ -113,17 +125,17 @@ func profession_scores(exclude: InhabitantData.Profession = InhabitantData.Profe
 	# candidate list even though the chain itself existed). has_building_of_type() is satisfied
 	# by a hut built at any point.
 	if grain > 0.0 or BuildingManager.has_building_of_type(BuildingDef.BuildingType.FARMER_HUT):
-		candidates[InhabitantData.Profession.MILLER] = _appeal(flour, TARGET_FLOUR, Goods.GoodType.FLOUR)
+		candidates[InhabitantData.Profession.MILLER] = _appeal(Goods.GoodType.FLOUR)
 	if flour > 0.0 or BuildingManager.has_building_of_type(BuildingDef.BuildingType.WINDMILL):
-		candidates[InhabitantData.Profession.BAKER] = _appeal(food, TARGET_FOOD, Goods.GoodType.FOOD)
+		candidates[InhabitantData.Profession.BAKER] = _appeal(Goods.GoodType.FOOD)
 	# Without a real storage yard, sawmills would get built around the Town Hall via its
 	# fallback – not intended. Only assign once a storage yard stands.
 	if BuildingManager.has_storage_yard():
-		candidates[InhabitantData.Profession.SAWMILL_WORKER] = _appeal(planks, TARGET_PLANKS, Goods.GoodType.PLANKS)
+		candidates[InhabitantData.Profession.SAWMILL_WORKER] = _appeal(Goods.GoodType.PLANKS)
 	# M29: the hunter covers the same food need as the baker but needs no previous chain –
 	# just forest. Only recruit if there is forest to hunt (otherwise they'd sit idle permanently).
 	if WorldGrid.has_forest():
-		candidates[InhabitantData.Profession.HUNTER] = _appeal(food, TARGET_FOOD, Goods.GoodType.FOOD) * HUNT_FOOD_WEIGHT
+		candidates[InhabitantData.Profession.HUNTER] = _appeal(Goods.GoodType.FOOD, HUNT_FOOD_WEIGHT)
 
 	candidates.erase(exclude)
 
@@ -145,25 +157,102 @@ func profession_scores(exclude: InhabitantData.Profession = InhabitantData.Profe
 ## raised price/subsidy lifts a profession even when its stock is comfortable (0 scarcity). The
 ## idle baseline keeps every available profession slightly attractive so the crowding penalty in
 ## pick_best_profession can divert surplus labor onto otherwise-idle productive work.
-func _appeal(current: float, target: float, good: int) -> float:
+## M34: `urgency_scale` weights the scarcity term only (see HUNT_FOOD_WEIGHT) – never the profit
+## term or the idle baseline, so a scaled profession keeps the same floor as everyone else.
+func _appeal(good: int, urgency_scale: float = 1.0) -> float:
 	var profit: float = maxf(0.0, _price_weight(good) - 1.0)
-	return _urgency(current, target) + PROFIT_WEIGHT * profit + IDLE_BASELINE
+	return urgency_scale * urgency_of(good) + PROFIT_WEIGHT * profit + IDLE_BASELINE
 
 
-func _urgency(current: float, target: float) -> float:
-	return maxf(0.0, target - current) / target
+## M34: how badly the settlement needs more of this good, in [0,1]. Two independent signals:
+##   flow_gap  – how far production is running short of actual demand. This is what makes a
+##               1150-food pile with zero domestic food production read as a deficit rather than
+##               as abundance.
+##   cover_gap – how far the stock is below TARGET_COVER_DAYS of that demand, i.e. an imminent
+##               stock-out even while production keeps up.
+## Combined as a probabilistic OR so either alone can raise urgency and the result stays in [0,1].
+## An intermediate additionally inherits a damped share of its downstream good's urgency, so the
+## chain staffs itself back-to-front from real end-product scarcity — damped by how well this stage
+## is already stocked, so once grain covers the installed mills the bottleneck has demonstrably
+## moved downstream and FARMER stops being recruited even while FOOD is still scarce.
+func urgency_of(good: int) -> float:
+	var demand := demand_rate(good)
+	var stock := _stock_of(good)
+	var flow_gap := 0.0
+	var cover_gap := 0.0
+	if demand > FLOW_EPS:
+		flow_gap = clampf((demand - supply_rate(good)) / demand, 0.0, 1.0)
+		cover_gap = clampf(1.0 - (stock / demand) / TARGET_COVER_DAYS, 0.0, 1.0)
+	elif TERMINAL_MIN_BUFFER.has(good):
+		# No measurable demand yet (world start): fall back to an absolute floor buffer, but only
+		# for goods that are consumed as an end product. Intermediates get nothing here on purpose.
+		cover_gap = clampf(1.0 - stock / float(TERMINAL_MIN_BUFFER[good]), 0.0, 1.0)
+	var weighted: float = FLOW_WEIGHT * flow_gap
+	var own: float = weighted + (1.0 - weighted) * cover_gap
+	if DOWNSTREAM_GOOD.has(good):
+		var derived: float = CHAIN_PROPAGATION * urgency_of(DOWNSTREAM_GOOD[good]) \
+			* (1.0 - _cover_ratio(good))
+		own = maxf(own, derived)
+	return clampf(own, 0.0, 1.0)
 
 
-## M31: is this good currently below its stock target (scarce / actively needed)? Used to keep a
-## producer of a scarce good from abandoning their post on a drifted price signal – a food
-## producer must not quit during a food shortage (that caused a death-spiral oscillation where
-## hunters flipped to an idle baker role and food production collapsed). See
-## SimulationManager._check_market_profitability.
+## Days of cover the current stock represents, normalised against TARGET_COVER_DAYS. 0 when there
+## is no demand at all (nothing to cover).
+func _cover_ratio(good: int) -> float:
+	var demand := demand_rate(good)
+	if demand <= FLOW_EPS:
+		return 0.0
+	return clampf((_stock_of(good) / demand) / TARGET_COVER_DAYS, 0.0, 1.0)
+
+
+## Units per game day the settlement wants: the larger of its INSTALLED consuming capacity
+## (analytic — a starved mill still declares its appetite, so this is never circular) and its
+## recent MEASURED consumption (which is what catches lumpy construction draw on wood/stone).
+func demand_rate(good: int) -> float:
+	return maxf(_installed_demand_rate(good), measured_consumption_rate(good))
+
+
+## Consuming capacity currently standing in the settlement, per game day. Uses is_constructed
+## rather than occupancy for the same reason M27 switched to has_building_of_type: occupancy at
+## this exact frame flickers with every profession switch.
+func _installed_demand_rate(good: int) -> float:
+	var per_day := 0.0
+	if good == Goods.GoodType.FOOD:
+		# Eating. Deliberately excludes population growth (POP_GROWTH_FOOD_COST is discretionary and
+		# would be as large as eating itself); the growth withdrawal is booked as measured
+		# consumption instead, see SimulationManager._process_population_growth.
+		for inh: InhabitantData in GameState.inhabitants:
+			per_day += SimulationManager.FOOD_PER_INHABITANT_PER_TICK \
+				* inh.food_need_multiplier() * MEALS_PER_DAY
+	for b: BuildingInstance in BuildingManager.buildings:
+		if b.def == null:
+			continue
+		if not b.is_constructed:
+			# M34: build materials still owed by an unfinished site or a ruin. This has to be
+			# counted analytically, exactly like a starved mill's appetite: construction demand
+			# only shows up as MEASURED consumption once someone can actually afford to buy the
+			# material, so a settlement too poor to build reads as having no demand for wood or
+			# stone at all — which then starves the woodcutter/quarry professions and guarantees
+			# the builds keep failing. Amortised over the cover window rather than booked at once,
+			# so a burst of sites does not pin the material goods at maximum urgency.
+			per_day += float(b.pending_build_cost.get(good, 0.0)) / BUILD_DEMAND_DAYS
+			continue
+		if b.def.input_good != good or b.def.output_interval <= 0.0:
+			continue
+		per_day += b.def.input_amount * DAY_SECONDS / b.def.output_interval
+	return per_day
+
+
+## M31/M34: is this good genuinely in deficit? Used to keep a producer of a scarce good from
+## abandoning their post on a drifted price signal – a food producer must not quit during a food
+## shortage (that caused a death-spiral oscillation where hunters flipped to an idle baker role and
+## food production collapsed). See SimulationManager._check_market_profitability.
+## M34: now reads the same urgency signal the recruiting side uses, so pull and hold can no longer
+## disagree. The old fixed-target version was structurally asymmetric: GRAIN/FLOUR sat below their
+## target often enough that FARMER/MILLER were effectively unfireable, while FOOD at 1150 was never
+## below its target so BAKER/HUNTER had no protection at all.
 func is_good_scarce(good: int) -> bool:
-	var target: float = GOOD_TARGETS.get(good, 0.0)
-	if target <= 0.0:
-		return false
-	return _stock_of(good) < target
+	return urgency_of(good) >= SCARCE_URGENCY_THRESHOLD
 
 
 ## Current community stock of a good, from the same storage split pick_best_profession uses
@@ -183,3 +272,123 @@ func _price_weight(good: int) -> float:
 	# M20: current market price incl. subsidy/tariff steers profession choice.
 	var effective: float = BuildingManager.get_market_price(good) + BuildingManager.get_subsidy(good)
 	return maxf(0.0, effective) / base
+
+
+# ---------------------------------------------------------------------------
+# M34: rolling production/consumption flow
+# ---------------------------------------------------------------------------
+## Nothing tracked actual throughput before this. RunRecorder._trade_qty looks similar but is
+## unusable here: it is zeroed at every metrics sample and is fed from both directions, including
+## the crown backstop (which only transfers lot OWNERSHIP – the goods never leave community_stock).
+##
+## A ring of buckets rotated on the sim clock gives a smoothed rate without storing timestamps.
+## The window is deliberately a few days long: flow is twitchier than a stock level, and a single
+## construction burst should not pin several goods at maximum urgency at once.
+## Literals rather than SimulationManager.DAY_LENGTH_SECONDS because a const cannot reference
+## another autoload; kept in sync with it by name here.
+const DAY_SECONDS := 60.0          # == SimulationManager.DAY_LENGTH_SECONDS
+const MEALS_PER_DAY := 3.0         # == DAY_LENGTH_SECONDS / FOOD_CONSUMPTION_INTERVAL
+const FLOW_BUCKETS := 6
+const FLOW_BUCKET_SECONDS := DAY_SECONDS * 0.5   # 6 × half a day = 3-day window
+const FLOW_EPS := 0.01
+
+var _in_buckets: Dictionary = {}
+var _out_buckets: Dictionary = {}
+var _bucket_index: int = 0
+var _bucket_accum: float = 0.0
+
+
+## Goods entering the community stock from a producer (exchange offer / direct crown sale).
+func note_production(good: int, qty: float) -> void:
+	if qty > 0.0:
+		_bucket_array(_in_buckets, good)[_bucket_index] += qty
+
+
+## Goods leaving the community stock to a consumer (market purchase, population growth).
+func note_consumption(good: int, qty: float) -> void:
+	if qty > 0.0:
+		_bucket_array(_out_buckets, good)[_bucket_index] += qty
+
+
+## Rotates the ring. Driven from SimulationManager._process on SIM time, so the window means the
+## same number of game days at every speed setting.
+func advance_flow_clock(delta: float) -> void:
+	_bucket_accum += delta
+	while _bucket_accum >= FLOW_BUCKET_SECONDS:
+		_bucket_accum -= FLOW_BUCKET_SECONDS
+		_bucket_index = (_bucket_index + 1) % FLOW_BUCKETS
+		for good in _in_buckets:
+			_in_buckets[good][_bucket_index] = 0.0
+		for good in _out_buckets:
+			_out_buckets[good][_bucket_index] = 0.0
+
+
+func supply_rate(good: int) -> float:
+	return _flow_rate(_in_buckets, good)
+
+
+func measured_consumption_rate(good: int) -> float:
+	return _flow_rate(_out_buckets, good)
+
+
+## Units per GAME DAY, averaged over the whole window.
+func _flow_rate(store: Dictionary, good: int) -> float:
+	if not store.has(good):
+		return 0.0
+	var total := 0.0
+	for v: float in store[good]:
+		total += v
+	return total / (float(FLOW_BUCKETS) * FLOW_BUCKET_SECONDS / DAY_SECONDS)
+
+
+func _bucket_array(store: Dictionary, good: int) -> Array:
+	if not store.has(good):
+		var fresh: Array = []
+		fresh.resize(FLOW_BUCKETS)
+		fresh.fill(0.0)
+		store[good] = fresh
+	return store[good]
+
+
+## Autoload state survives reload_current_scene(), so without this the Restart button would carry
+## the previous run's flow history into the new one. Called from SaveLoadManager.restart_game.
+func reset_state() -> void:
+	_in_buckets = {}
+	_out_buckets = {}
+	_bucket_index = 0
+	_bucket_accum = 0.0
+
+
+## Persisted so a loaded game does not start with an empty window – every good would read as a
+## total production deficit for the first few days and trigger a burst of job changes.
+func serialize_flow() -> Dictionary:
+	return {
+		"in": _in_buckets.duplicate(true),
+		"out": _out_buckets.duplicate(true),
+		"index": _bucket_index,
+		"accum": _bucket_accum,
+	}
+
+
+func restore_flow(data: Dictionary) -> void:
+	reset_state()
+	if data.is_empty():
+		return
+	_in_buckets = _restore_buckets(data.get("in", {}))
+	_out_buckets = _restore_buckets(data.get("out", {}))
+	_bucket_index = int(data.get("index", 0)) % FLOW_BUCKETS
+	_bucket_accum = float(data.get("accum", 0.0))
+
+
+## JSON turns the int good keys into strings and may shorten a bucket array; normalise both.
+func _restore_buckets(raw: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for key in raw:
+		var arr: Array = []
+		arr.resize(FLOW_BUCKETS)
+		arr.fill(0.0)
+		var src: Array = raw[key]
+		for i in mini(src.size(), FLOW_BUCKETS):
+			arr[i] = float(src[i])
+		out[int(key)] = arr
+	return out
