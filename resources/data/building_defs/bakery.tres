@@ -24,4 +24,4 @@ output_amount = 1.0
 output_interval = 10.0
 input_good = 5
 input_amount = 1.0
-carry_capacity = 1.0
+carry_capacity = 5.0

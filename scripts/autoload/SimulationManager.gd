@@ -1568,12 +1568,15 @@ func _handle_delivering(inhabitant: InhabitantData) -> void:
 	if not inhabitant.path.is_empty() and inhabitant.path_index < inhabitant.path.size():
 		return
 
-	print("[DELIVER-DBG] prof=%s pathlen=%d %s" % [
-		InhabitantData.Profession.keys()[inhabitant.profession], inhabitant.path.size(),
-		"<<TELEPORT>>" if inhabitant.path.is_empty() else ""])
-
 	var good: int = PROFESSION_TO_GOOD[inhabitant.profession]
-	var amount: float = inhabitant.inventory.get(good, 0.0)
+	var total: float = inhabitant.inventory.get(good, 0.0)
+	# M34: same reserve carve-out as _handle_hauling_home. _offer_carried_goods and
+	# _liquidate_for_food both already `continue` on FOOD for exactly this reason; this path forgot
+	# the guard, so a BAKER/HUNTER put their own rations on consignment (unpaid until a buyer takes
+	# the lot) and _buy_food_at below then bought ~3 back for CASH at crown_ask plus the greed
+	# premium – a guaranteed loss on every delivery trip.
+	var reserve: float = _desired_food_stock(inhabitant) if good == Goods.GoodType.FOOD else 0.0
+	var amount: float = maxf(0.0, total - reserve)
 	var target := BuildingManager.get_building(inhabitant.trade_target_id)
 	if target == null:
 		target = MarketManager.pick_best_market(good, inhabitant.cell, MarketManager.Side.SELL)
@@ -1597,8 +1600,9 @@ func _handle_delivering(inhabitant: InhabitantData) -> void:
 			inhabitant.last_sale_unit_price = price
 			inhabitant.time_since_last_sale = 0.0
 		# Unaccepted goods (storage full) stay in the inventory and get delivered again
-		# later – so nothing is lost.
-		inhabitant.inventory[good] = amount - sold
+		# later – so nothing is lost. M34: `total - sold`, not `amount - sold`: `amount` now excludes
+		# the personal food reserve, so subtracting from it would silently delete that reserve.
+		inhabitant.inventory[good] = total - sold
 
 	inhabitant.trade_target_id = -1
 
@@ -2105,9 +2109,15 @@ func _handle_hauling_home(inhabitant: InhabitantData) -> void:
 
 	var good: int = PROFESSION_TO_GOOD[inhabitant.profession]
 	var carried: float = inhabitant.inventory.get(good, 0.0)
-	if carried > 0.0:
-		hut.output_stock[good] = hut.output_stock.get(good, 0.0) + carried
-		inhabitant.inventory[good] = 0.0
+	# M34: a HUNTER's product IS food, so `carried` includes their own eating cushion. Dumping all
+	# of it into the hut pile left them at 0 and made _needs_emergency_food fire on the very next
+	# frame – every single hunt trip ended in a forced granary run. Only the surplus above the
+	# personal reserve (_desired_food_stock, the same figure _buy_food_at tops up to) is deposited.
+	var reserve: float = _desired_food_stock(inhabitant) if good == Goods.GoodType.FOOD else 0.0
+	var deposit: float = maxf(0.0, carried - reserve)
+	if deposit > 0.0:
+		hut.output_stock[good] = hut.output_stock.get(good, 0.0) + deposit
+		inhabitant.inventory[good] = carried - deposit
 	inhabitant.state = InhabitantData.State.WORKING
 
 
