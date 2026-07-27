@@ -203,6 +203,11 @@ func _on_path_changed(cell: Vector2i) -> void:
 ## depending on the starting colonists' profession lottery to run stably enough and produce net
 ## food.
 ##
+## M34: the M31 reasoning below no longer applies — EconomyManager.TARGET_FOOD is gone, and urgency
+## is measured against demand rather than a fixed stock level, so a large buffer no longer masks
+## scarcity (a pile with no domestic producers now reads as a deficit, not as abundance). The
+## current 1150 therefore functions purely as a survival cushion. Kept for the historical rationale:
+##
 ## M31: the food buffer was deliberately CUT from 3000 to a much smaller cushion. The old huge
 ## buffer masked food scarcity for ~200 days (stock ≫ EconomyManager.TARGET_FOOD=120), which (a)
 ## suppressed BAKER/HUNTER recruitment (both keyed to food urgency) and (b) — because eating means

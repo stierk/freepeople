@@ -23,11 +23,15 @@ goods on a market, buy food, and — if they can't eat — starve and die.
 - **Game over:** fires when the population reaches 0. `GameState.game_over(days_survived)` reports
   how many in-game days the settlement lasted.
 - **Population growth is enabled** (`SimulationManager.POP_GROWTH_ENABLED = true`, M27): once
-  community food stock exceeds `POP_GROWTH_FOOD_THRESHOLD` (deliberately set *above* the Town
-  Hall's own starting food stock, so growth requires the settlement to have produced a genuine
-  surplus, not just be coasting on its founding stock), a new colonist spawns every
-  `POP_GROWTH_INTERVAL`, up to `POP_MAX = 32`. Every death is otherwise still permanent — growth
-  is a slow, food-gated replacement mechanism, not a guarantee.
+  community food stock exceeds `POP_GROWTH_FOOD_THRESHOLD`, a new colonist spawns every
+  `POP_GROWTH_INTERVAL`, up to `POP_MAX = 32`, costing `POP_GROWTH_FOOD_COST` food from the
+  granary. Every death is otherwise still permanent — growth is a slow, food-gated replacement
+  mechanism, not a guarantee.
+  > **Known mismatch (M34):** the intent was that this threshold sits *above* the Town Hall's own
+  > starting food stock, so growth requires a genuine produced surplus rather than coasting on the
+  > founding stockpile. It currently does not: `POP_GROWTH_FOOD_THRESHOLD = 1000.0` against a
+  > starting stock of `1150.0` (`World.gd`), so growth fires immediately on founding stock. Left as
+  > a tuning decision rather than silently changed.
 
 ---
 
@@ -62,7 +66,8 @@ Inhabitants are plain data objects (`InhabitantData`, `scripts/data/inhabitant_d
 sheets, per-profession walk/work animation rows; hunger tints the sprite; the dead become graves).
 
 Per-inhabitant state:
-- **Profession** (`Profession`): `NONE, WOODCUTTER, SAWMILL_WORKER, QUARRY_WORKER, FARMER, MILLER, BAKER`.
+- **Profession** (`Profession`): `NONE, WOODCUTTER, SAWMILL_WORKER, QUARRY_WORKER, FARMER, MILLER,
+  BAKER, HUNTER` (M29 appended `HUNTER`; enum values are serialized as ints, so only ever append).
 - **Inventory:** capacity **10** total goods (`INVENTORY_CAPACITY`); gold is separate and unlimited.
   `FOOD_RESERVE = 2` slots are kept free for food when loading trade goods (`goods_space()`), so an
   inhabitant on a long errand can still buy food and not starve with a full pack.
@@ -112,11 +117,57 @@ inhabitants eat Food. Two independent material chains feed construction: Woodcut
 Sawmill → **Planks**, and Quarry → **Stone**. The Hunter (M29) is a separate, parallel Food source
 with no inputs, feeding the same community Food pool as the Baker.
 
-**Profession assignment** (`EconomyManager.pick_best_profession`): a new or job-switching inhabitant
-picks the scarcest *and* most valuable profession — urgency (how far current community stock is below
-the `TARGET_*` levels) weighted by good price **plus the crown subsidy/tariff for that good**
-(`_price_weight` ≈ (market price + `get_subsidy`) / base price), with a small random tie-break (`RANDOM_TIEBREAK`).
-An already-active, understaffed hut of that profession is preferred over building anew.
+**Profession assignment** (`EconomyManager.pick_best_profession` → `profession_scores`): a new or
+job-switching inhabitant picks the profession with the highest **appeal**, which is *additive*
+(M31 — it used to be a multiplicative `urgency × price`, which was a hard gate: a good at or above
+its target had urgency 0, so no price or subsidy could ever wake a non-scarce profession):
+
+```
+appeal(P)  = urgency_scale · urgency_of(good) + PROFIT_WEIGHT · profit + IDLE_BASELINE
+score(P)   = appeal(P) / (1 + CROWD_WEIGHT · workers_already_in_P) + randf() · RANDOM_TIEBREAK
+profit     = max(0, (market price + get_subsidy) / base price − 1)      # _price_weight
+```
+
+`IDLE_BASELINE` is the floor every available profession keeps at zero scarcity, so surplus labour can
+spread; the crowding divisor is what makes each additional colonist prefer the next-best trade.
+`urgency_scale` is 1.0 except for the Hunter (`HUNT_FOOD_WEIGHT`, see below) and weights the scarcity
+term **only**, never the profit term or the baseline.
+
+**Urgency is demand-relative, not stock-vs-target (M34).** `EconomyManager.urgency_of(good)` returns
+`[0,1]` from two independent signals, combined as a probabilistic OR so either alone can raise it:
+
+- **flow gap** — how far production is running short of demand (`FLOW_WEIGHT`). This is what makes a
+  large stockpile with no domestic producers read as a deficit.
+- **cover gap** — how far the stock is below `TARGET_COVER_DAYS` of that demand, i.e. an imminent
+  stock-out even while production keeps up.
+
+Demand (`demand_rate`) is the larger of *installed* capacity (analytic: eaters' appetite, each
+constructed consumer's input rate, and each unfinished building's outstanding material cost amortised
+over `BUILD_DEMAND_DAYS`) and *measured* consumption from a rolling 3-day flow window
+(`FLOW_BUCKETS` × `FLOW_BUCKET_SECONDS`, fed by `note_production`/`note_consumption` from the
+exchange and the population-growth food withdrawal). Counting installed demand analytically is what
+keeps the signal from being circular — a starved mill still declares its appetite, and a settlement
+too poor to buy wood still registers demand for wood.
+
+An intermediate additionally inherits `CHAIN_PROPAGATION` of its downstream good's urgency
+(`DOWNSTREAM_GOOD`: Grain → Flour → Food), damped by how well it already covers its own installed
+consumers — so the chain staffs itself back-to-front from real end-product scarcity and stops
+recruiting once the bottleneck has demonstrably moved downstream.
+
+The pre-M34 fixed `TARGET_*` stock levels are gone. They were wrong in both directions: Grain/Flour
+are intermediates whose stock says nothing about whether anyone needs more, and Food sat far above
+`TARGET_FOOD` while draining with zero domestic production.
+
+**Preferring an existing hut.** An active, understaffed hut of the inhabitant's *own* profession is
+always the first choice (`get_understaffed_hut` — no build, shared workplace). Reclaiming a vacant or
+derelict hut of a **different** trade rewrites the profession, so since M34 it is gated on appeal
+(`CROSS_TRADE_REUSE_RATIO`, see `SimulationManager._reuse_allowed_types`): before that, the reuse
+bonus was compared against site scores on a completely different scale and therefore always won,
+silently discarding the economic decision that had just been made.
+
+See also `RunRecorder`'s `appeal_<PROF>` / `scarce_<GOOD>` metrics columns, which record this signal
+per game day — reading them against `prof_<PROF>` is how you tell "the score chose badly" apart from
+"something downstream overrode the score".
 
 ---
 
@@ -156,6 +207,12 @@ and a tax rate (`TradeData`). Multi-cell footprints are supported (`WorldGrid` f
 > dead field — every building fell back to a shared flat 100-unit cap regardless of what its
 > `.tres` declared) is what actually bounds the community stockpile, and why the Treasury's head
 > tax (`get_daily_tax`) is structurally unreachable without a player building one (see §6).
+>
+> For exactly this reason the Town Hall **also carries `TradeData`** since M34, even though it is not
+> in `TRADE_BUILDING_TYPES` (that array additionally means "first building of this type is free", and
+> the Town Hall is not player-placeable). Withholding it had meant an unattended settlement had no
+> reachable price lever whatsoever. Defaults come from `Goods.BASE_PRICES`, so the fixed-average
+> behaviour it used to have still holds until the player moves a stepper.
 
 ### Maintenance / decay
 
@@ -174,7 +231,14 @@ abandoned huts.
 
 The market is **decentralized**: every Storage Yard and Granary hosts a `MarketExchange`
 (`scripts/data/market_exchange.gd`), coordinated by `MarketManager`. Ticks every
-`MARKET_TICK_INTERVAL = 5 s` do order matching, price drift, and exports.
+`MARKET_TICK_INTERVAL = 5 s` do order matching and price drift. Since M34 the Town Hall counts as a
+full exchange here too (`BuildingManager.get_all_storages_for_good` matches on which goods an
+exchange *carries*, not on building type) — it is the only exchange an unattended run ever has.
+
+> **There is no export mechanic.** This section used to claim market ticks also do "exports"; no such
+> code exists. `MARKET_SURPLUS_THRESHOLD`, `MARKET_SELL_FRACTION`, `MARKET_FOOD_IMPORT_SHARE` and
+> `TITHE_SALE_INTERVAL` in `SimulationManager` are dead constants — each is referenced exactly once,
+> by its own declaration.
 
 - **Best-market choice** (`MarketManager.pick_best_market`): sellers maximize price minus travel
   cost, buyers minimize price plus travel cost; `DIST_COST_PER_CELL = 0.05` gold per cell (Manhattan
@@ -191,6 +255,13 @@ The market is **decentralized**: every Storage Yard and Granary hosts a `MarketE
   above) is reset on every switch (M27), so a freshly-switched inhabitant gets a full grace window
   before being judged again, instead of inheriting an already-inflated break-even from the job they
   just left.
+  **Scarcity guard:** a producer whose good is currently scarce is never judged unprofitable — a food
+  producer must not quit during a food shortage. M34 made "scarce" mean
+  `EconomyManager.urgency_of(good) >= SCARCE_URGENCY_THRESHOLD`, i.e. **the same signal the
+  recruiting side reads**, so pull and hold can no longer disagree. The previous fixed-target version
+  was structurally asymmetric: Grain/Flour sat below their target often enough that Farmers and
+  Millers were effectively unfireable, while Food at 1150 was never below its target, so Bakers and
+  Hunters had no protection at all.
 - **Resource-stall bypass (M33):** the scarcity guard in the bullet above (a currently-scarce good
   never triggers a switch, so a producer isn't judged unprofitable during a shortage) can itself
   strand a woodcutter or quarry worker whose hut's nearby forest/stone has been fully harvested out:
@@ -220,15 +291,22 @@ The market is **decentralized**: every Storage Yard and Granary hosts a `MarketE
   (`SimulationManager._process_basic_income`). A negative value here is mechanically identical to
   the Treasury's `daily_tax` head tax (§5) — same per-inhabitant, capped-by-own-gold deduction into
   the crown pool — but reachable straight from the Town Hall, without a player-built Treasury.
-- **Bootstrap policy defaults (M27):** all of the above (`subsidy`, `basic_income`) used to default
-  to `0.0` and were only ever set by a player clicking the Town Hall UI — in an unattended game this
-  safety net was completely inert. `World.gd` now sets sensible non-zero defaults at world creation
-  (a small flat basic income, a small Food subsidy, a small Stone tariff). At these bootstrap values
-  the Stone tariff is the only *default* crown income source, but it's no longer the only *possible*
-  one without a Treasury: a negative `basic_income` (above) is an equally Town-Hall-native head tax.
-  Only the Treasury's own `daily_tax` field remains structurally gated behind a player build (see
-  §5). Still fully player-editable at any time via the existing UI,
-  exactly like every other policy value.
+- **Bootstrap policy defaults (M27, corrected M34):** `subsidy` and `basic_income` default to `0.0`
+  and are otherwise only ever set by a player clicking the Town Hall UI — in an unattended game the
+  safety net is then completely inert. M27 claimed to have fixed this; it had not. The values in
+  `World._place_start_buildings` were still literally `0.0`, and the measured consequence was exactly
+  the death spiral this bullet warns about: at `--turbo-seed=42` the settlement died on **day 22 with
+  10 starvation deaths and 753 food still in the granary**, because gold only ever flows one way —
+  eating pays `crown_ask` into the treasury (which rose 1133 → 2100) while a producer's goods sit on
+  consignment until a buyer takes them, so every inhabitant's gold reached exactly 0.
+  **M34 sets `basic_income = 2.0`** (the same seed then survives to day 60 with 0 deaths). It is
+  sized as a safety net, not a wage: an inhabitant eats ~2.1 food/day at base price 2.0, so this
+  covers about half a day's rations and keeps money circulating rather than pooling in the treasury.
+  The Food subsidy and Stone tariff remain `0.0` for now — they only became meaningful once M34
+  connected the price signal to profession scoring (§4), so they are worth tuning separately.
+  With `basic_income` positive, the crown has no *default* income source; a negative `basic_income`
+  (above) is the Town-Hall-native head tax, while the Treasury's own `daily_tax` stays structurally
+  gated behind a player build (see §5). All still player-editable at any time via the existing UI.
 
 ---
 
@@ -264,7 +342,8 @@ Grain accumulates up to the Farm House `carry_capacity` (3), then the farmer del
 
 - **Time:** 1 day = `DAY_LENGTH_SECONDS = 60 s` at normal speed. Speed modes (`SimulationManager.SpeedMode`):
   `PAUSED (0×), NORMAL (1×), FAST (2×), FASTEST (5×)`.
-- **Eating:** each inhabitant consumes `FOOD_PER_INHABITANT_PER_TICK = 1` food every
+- **Eating:** each inhabitant consumes `FOOD_PER_INHABITANT_PER_TICK = 0.7` food (M28, lowered from
+  1.0 — see §12 and the milestone log) times their Speed/Frugality trait multiplier, every
   `FOOD_CONSUMPTION_INTERVAL = DAY_LENGTH_SECONDS / 3` (3 meals/day). A working inhabitant carrying
   fewer than `FOOD_RESTOCK_THRESHOLD = 2` food will start a buy-food trip at a free decision point.
 - **Starvation:** a missed meal increments `missed_meals`; after `STARVATION_DEATH_MEALS = 4`
@@ -275,10 +354,27 @@ Grain accumulates up to the Farm House `carry_capacity` (3), then the farmer del
 ## 9. Persistence & telemetry
 
 - **Save/Load** (`SaveLoadManager`): serializes world tiles, crops, buildings, inhabitants, market
-  exchanges and gold. Enum values are stored as ints — this is why `GoodType`/`BuildingType`/`State`
-  values must only ever be **appended**, never reordered.
+  exchanges, gold, and `EconomyManager`'s flow window (M34, additive `"flow"` key — absent in older
+  saves, which then simply start with an empty window). Enum values are stored as ints — this is why
+  `GoodType`/`BuildingType`/`State` values must only ever be **appended**, never reordered.
+  Autoload state survives `reload_current_scene()`, so every manager with run state needs a
+  `reset_state()` called from `restart_game` — `EconomyManager` included since M34, or a restarted
+  run inherits the previous one's production history.
 - **RunRecorder** (`scripts/autoload/RunRecorder.gd`): writes per-run KPI CSV + events JSONL under
-  `user://runs` for post-hoc analysis of a settlement's trajectory.
+  `user://runs` for post-hoc analysis of a settlement's trajectory. Columns are **only ever appended
+  at the tail**, so existing column positions stay stable across milestones. Beyond the raw counts
+  (`prof_<PROF>`, `bld_<TYPE>`, per-good `community_`/`crown_`/`price_`/`tradevol_`, gold spread,
+  building health) M34 added `appeal_<PROF>` and `scarce_<GOOD>`, which record the *decision signal*
+  rather than its outcome. Reading `appeal_<PROF>` against `prof_<PROF>` is how you tell "the score
+  chose badly" apart from "something downstream overrode the score" — a low appeal with a stubbornly
+  high headcount means the latter.
+- **TurboRunner** (`--turbo=<days>`): dev-only headless fast-forward. `--turbo-seed=<n>` (M34) makes
+  a run bit-reproducible — without it `World` seeds terrain from an engine-autoseeded `randi()`, so
+  two runs of identical code are not comparable and any A/B is reading noise. `--turbo-step`,
+  `--turbo-storage` (place a Storage Yard + Granary as a foresightful player would) and
+  `--turbo-food-price=<x>` (set the crown's Food Sell price, to test the policy lever headlessly)
+  round it out. Behaviour-neutral refactors should be verified as a byte-identical CSV diff at a
+  fixed seed; behaviour-changing ones need a spread of seeds, since single runs mislead badly.
 - **GlobalInventory** exposes aggregate community stock and emits change notifications for the UI.
 
 ---
@@ -335,7 +431,11 @@ not an exact history.
   starting gold from 100 to 20 — small enough to matter, sized empirically (via repeated turbo runs)
   to cover the volatile early game rather than guessed. Gave the Town Hall non-zero default policy
   (basic income, a Food subsidy, a Stone tariff) so the existing safety-net mechanics are live from
-  day one instead of requiring a player click. Fixed a state-machine bug where a market-driven
+  day one instead of requiring a player click.
+  > **Corrections found in M34:** neither of the last two claims held in the shipped code. Colonist
+  > starting gold is `100.0` (`GameState.gd`), not 20. And all three policy defaults were literally
+  > `0.0` in `World.gd` — the safety net had never actually been live, despite this entry and §6
+  > both arguing from it. M34 set `basic_income = 2.0`; the two subsidies remain `0.0`. Fixed a state-machine bug where a market-driven
   profession switch (e.g. Farmer→Miller) was immediately undone by unconditionally reclaiming any
   vacant hut of any profession before ever attempting to build the newly-chosen one — this is why
   Windmills/Bakeries essentially never got built before this fix. Fixed `time_since_last_sale` not
@@ -386,6 +486,53 @@ not an exact history.
   (`_handle_gatherer_working`) the inhabitant is forced through the normal
   `try_switch_unprofitable` → `pick_best_profession` path, same mechanism as any other market-driven
   job change.
+- **M34** — Profession diversity & the signals behind it. Symptom: the roster froze at ~8 Farmers
+  with no Bakers and no Hunters, and a raised Food Sell price changed nothing. Four independent
+  causes, each fixed and measured separately:
+  1. **Reproducibility first.** `World` seeds terrain from an engine-autoseeded `randi()`, so no two
+     turbo runs were comparable and every earlier balance pass had to argue from variance across
+     runs. Added `--turbo-seed=<n>` (and `--turbo-food-price=<x>`), plus deterministic
+     `EconomyManager.profession_scores()` and `appeal_<PROF>`/`scarce_<GOOD>` metrics columns, so the
+     choice signal itself is recorded rather than inferred from headcounts.
+  2. **The reuse bonus overruled the score.** `REUSE_BONUS_EMPTY = 1000.0` was compared against
+     `SiteSelection.score_site` values in the −5…−60 range — a unit mismatch, so any vacant hut
+     always won and `_reassign_to_hut_profession` then overwrote the freshly-chosen profession. The
+     new columns proved it: `appeal_FARMER` fell to **0.011**, the lowest of every profession, while
+     8 farmers persisted for a whole 60-day run. Cross-trade reclaim is now gated on appeal
+     (`CROSS_TRADE_REUSE_RATIO`); same-profession reuse was already handled by `get_understaffed_hut`.
+  3. **The price lever was not connected.** The Town Hall was deliberately denied `TradeData`, and
+     `get_all_storages_for_good` filtered on Granary/Storage-Yard type with no Town Hall fallback —
+     so in a run without a player-built Granary there was no settable price at all and
+     `get_market_price` returned the flat base price forever (`price_FOOD` = 2.00 on every recorded
+     row), pinning `_appeal`'s profit term at exactly 0. Both fixed; behaviour is unchanged at
+     defaults because `TradeData` seeds from `BASE_PRICES`. Verified against the closed form: at
+     Sell price 4.0 the Hunter's raw appeal is 0.521 vs. 0.520 predicted. The lever cuts both ways —
+     a Food price of 6.0 bankrupts the eaters and kills the settlement by day 25.
+  4. **Urgency was stock-vs-fixed-target.** Replaced by the demand-relative `urgency_of()` in §4,
+     backed by a rolling production/consumption tracker. `TARGET_*`, `GOOD_TARGETS` and
+     `FARMER_NO_CHAIN_FACTOR` are deleted; `is_good_scarce` now reads the same signal the recruiting
+     side uses, which makes the old retention asymmetry (Farmer/Miller effectively unfireable while
+     Baker/Hunter had no protection at all) structurally impossible rather than merely retuned.
+     `HUNT_FOOD_WEIGHT` now scales the urgency term only — multiplying the whole appeal had also
+     shrunk the Hunter's `IDLE_BASELINE` to 0.12, the only profession sitting *below* the 0.15
+     `RANDOM_TIEBREAK`, i.e. a lottery it was rigged to lose.
+
+  Also fixed two bugs specific to the professions whose product **is** the consumed good: Hunters
+  dumped their own eating reserve into the hut pile (forcing a granary run after every hunt) and
+  Bakers/Hunters consigned their rations unpaid and then bought food back for cash on the same trip.
+  Bakery/Windmill `carry_capacity` 1.0 → 5.0 (it divides break-even, and gated the mill to fetching
+  one grain per trip). And `basic_income` was finally set non-zero: at seed 42 the settlement went
+  from dying on day 22 with 10 starvation deaths and 753 food still in the granary — gold flows one
+  way, eating pays the treasury while production sells on consignment — to surviving day 60 with 0.
+
+  Aggregate effect over 5 seeds × 60 days: food at day 60 203 → 266, `build_aborted` 128 → 63,
+  `jobchange` 21 → 3, derelict buildings 18 → 11, survival 5/5 throughout.
+
+  **Still open — capital formation.** Builders cannot afford materials: a Windmill needs 20 wood
+  while ~90 sits unsold in the Town Hall, but the builder holds ~2 gold and the willingness-to-pay
+  ceiling is capped by their own gold. Stalled sites are retried and re-aborted in a loop while the
+  crown treasury saturates around 2078. This is why food production shifts toward Hunters (no input
+  chain, no funded building) rather than the Farmer→Miller→Baker chain.
 
 ---
 

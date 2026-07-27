@@ -57,8 +57,8 @@ tone from turning arbitrarily cruel.
 | `GameState` | Inhabitant roster, population count, spawning, `game_over` signal |
 | `SimulationManager` | Master tick loop + inhabitant FSM; time/speed, hunger, farming, gathering — the big one |
 | `BuildingManager` | Building instances, profession↔building mapping, trade-building set, maintenance |
-| `EconomyManager` | Profession assignment by scarcity × price (`pick_best_profession`), stock targets |
-| `MarketManager` | Decentralized exchanges (+ `scripts/data/market_exchange.gd`), matching, pricing, exports |
+| `EconomyManager` | Profession assignment (`pick_best_profession`/`profession_scores`), flow-aware demand & urgency |
+| `MarketManager` | Decentralized exchanges (+ `scripts/data/market_exchange.gd`), matching, pricing |
 | `SaveLoadManager` | Serialize/restore world, buildings, inhabitants, market, gold |
 | `RunRecorder` | Per-run KPI CSV + events JSONL under `user://runs` |
 | `GlobalInventory` | Aggregate community stock + UI change notifications |
@@ -82,7 +82,7 @@ future-reproduction notes → **[`docs/GAME_DESIGN.md` §12](docs/GAME_DESIGN.md
   (comments were translated from German in M30 — see the milestone log).
 - **Save compatibility:** enums (`GoodType`, `BuildingType`, `State`, `CropStage`, …) are serialized as
   ints. **Only append** new enum values — never reorder or insert (see the note in `goods.gd`).
-- Features are tagged with milestone markers `Mxx` (M7–M33) in comments; grep them to trace when/why
+- Features are tagged with milestone markers `Mxx` (M7–M34) in comments; grep them to trace when/why
   a system was added. A milestone log is in `docs/GAME_DESIGN.md`.
 - Tuning constants live at the top of their manager (`SimulationManager` holds most balance values:
   `DAY_LENGTH_SECONDS`, crop timers, hunger/starvation, market margins, repair, throttles).
