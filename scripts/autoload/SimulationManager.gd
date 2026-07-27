@@ -94,7 +94,10 @@ const HUNT_CELLS_PER_TRIP := 5
 ## M28: lowered from 1.0 to 0.7 – a carried food stock therefore lasts ~43% longer,
 ## buy-food trips (and thus downtime + gold need) become noticeably rarer, without
 ## touching the meal cadence or the hunger/starvation thresholds themselves.
-const FOOD_PER_INHABITANT_PER_TICK := 0.7
+## M35: halved again (0.7 -> 0.35). Everyone eats half as much per meal; the per-inhabitant
+## trait spread is untouched, because every consumer multiplies this base with
+## InhabitantData.food_need_multiplier() (frugality/speed) before using it.
+const FOOD_PER_INHABITANT_PER_TICK := 0.35
 const FOOD_CONSUMPTION_INTERVAL := DAY_LENGTH_SECONDS / 3.0
 ## M22: how little carried food triggers a working inhabitant, at the free decision point
 ## (target selector in _handle_working), to start a buy-food trip. > 1 meal provides a
@@ -1300,6 +1303,10 @@ func _handle_moving_to_build(inhabitant: InhabitantData) -> void:
 	WorldGrid.set_building_footprint_rect(hut.cell, def.footprint_size, hut.id, true)
 	hut.construction_timer = def.build_time_seconds
 	hut.production_timer = def.output_interval
+	# M35: the empty-build_cost branch is a live case, not dead code – the Woodcutter's Hut
+	# has cost {} since M35 (see the milestone log): wood only ever enters the settlement
+	# through a woodcutter working from a finished hut, so charging that hut 20 wood made
+	# the settlement's only wood source unbuildable the moment the starting stock ran out.
 	if def.build_cost.is_empty():
 		inhabitant.state = InhabitantData.State.BUILDING
 	else:

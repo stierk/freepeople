@@ -13,9 +13,7 @@ max_capacity = 1
 build_time_seconds = 10.0
 is_player_placeable = false
 build_cost_gold = 0.0
-build_cost = {
-0: 20.0
-}
+build_cost = {}
 storage_capacity = {}
 
 output_good = 0

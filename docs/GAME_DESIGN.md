@@ -183,7 +183,7 @@ Definitions live in `resources/data/building_defs/*.tres` (`BuildingDef`,
 | Granary [1] | Community stock for Food/Grain/Flour; hosts a market exchange | cap 2 |
 | Treasury [2] | Trade building: editable buy/sell prices & head tax (the crown gold pool itself lives in `GlobalInventory.gold`, not here) | build cost 20 gold, cap 2 |
 | Marketplace [3] | Trading venue | build cost 10 gold, cap 2 |
-| Woodcutter's Hut [4] | Woodcutter workplace | carry 8 |
+| Woodcutter's Hut [4] | Woodcutter workplace | carry 8, **build cost `{}` since M35** (see the milestone log) |
 | Sawmill [5] | Wood → Planks | carry 1 |
 | Quarry Hut [6] | Stone extraction | carry 4 |
 | Farm House [7] | Farmer home; designates surrounding farmland | carry 3, cap 1 |
@@ -342,8 +342,8 @@ Grain accumulates up to the Farm House `carry_capacity` (3), then the farmer del
 
 - **Time:** 1 day = `DAY_LENGTH_SECONDS = 60 s` at normal speed. Speed modes (`SimulationManager.SpeedMode`):
   `PAUSED (0×), NORMAL (1×), FAST (2×), FASTEST (5×)`.
-- **Eating:** each inhabitant consumes `FOOD_PER_INHABITANT_PER_TICK = 0.7` food (M28, lowered from
-  1.0 — see §12 and the milestone log) times their Speed/Frugality trait multiplier, every
+- **Eating:** each inhabitant consumes `FOOD_PER_INHABITANT_PER_TICK = 0.35` food (1.0 → 0.7 in M28,
+  0.7 → 0.35 in M35 — see §12 and the milestone log) times their Speed/Frugality trait multiplier, every
   `FOOD_CONSUMPTION_INTERVAL = DAY_LENGTH_SECONDS / 3` (3 meals/day). A working inhabitant carrying
   fewer than `FOOD_RESTOCK_THRESHOLD = 2` food will start a buy-food trip at a free decision point.
 - **Starvation:** a missed meal increments `missed_meals`; after `STARVATION_DEATH_MEALS = 4`
@@ -533,6 +533,33 @@ not an exact history.
   ceiling is capped by their own gold. Stalled sites are retried and re-aborted in a loop while the
   crown treasury saturates around 2078. This is why food production shifts toward Hunters (no input
   chain, no funded building) rather than the Farmer→Miller→Baker chain.
+- **M35** — The wood dead end. Symptom: from ~day 24 woodcutters and hunters stand around without a
+  hut, apparently idle. They are not idle — they sit in `FETCHING_MATERIALS` at the Town Hall
+  waiting to buy Wood that no longer exists anywhere in the settlement. Measured at seed 42, 30
+  days: community Wood 300 (start) → 170 (day 2) → 94 (day 14) → **0 from day 24 on, permanently**;
+  18 `build_aborted` events, 12 of them the *same* Woodcutter's Hut retried by the *same*
+  inhabitant. Gold was never the constraint (one of the stuck woodcutters held 62.6).
+
+  Root cause is a bootstrap circularity: every workplace is paid for in Wood (Woodcutter's Hut 20,
+  Hunter's Tent 15, Quarry Hut 20, Farm House 10 + 10 Stone, Sawmill 30 + 10 Stone), but Wood only
+  enters the settlement through a woodcutter **working from a finished hut**. The 300 starting Wood
+  is therefore a strictly finite budget, and once it is spent the settlement can never build
+  anything again — least of all the one building that would produce more Wood.
+
+  Fix: the Woodcutter's Hut has `build_cost = {}` — a woodcutter raises their shack from the trees
+  they fell. Wood is now genuinely renewable: whenever the stock hits zero, a woodcutter can still
+  build and restart the flow. Every code path already handled an empty build cost, and each now
+  fires for real: `_start_new_build` goes straight to `BUILDING` (no material trip),
+  `_repair_material_cost` returns `{}` so `_try_start_repair` performs a free instant repair, and a
+  derelict hut restores itself in `build_time_seconds` with no fetch.
+
+  Deliberately **not** fixed here (all still open, all observed in the same run): a stalled build
+  that aborts resets `pending_build_cost` to the *full* cost in `_derelict_building`, destroying
+  material already delivered; `get_understaffed_hut` re-offers the very ruin the inhabitant just
+  failed to finish, with no cooldown and no check that the material exists, so the
+  abort → reclaim → stall loop spins indefinitely; and `price_WOOD` stayed flat at 2.00 across the
+  whole run even at zero stock, so scarcity never reached profession scoring in time for anyone to
+  become a woodcutter while Wood was still buildable-with.
 
 ---
 
