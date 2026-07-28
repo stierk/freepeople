@@ -13,6 +13,17 @@ const AUTO_SAVE_INTERVAL := 60.0
 
 
 func _ready() -> void:
+	# M35: no auto-save during a headless turbo run. TurboRunner deletes the save on start so the
+	# world bootstraps fresh, but this timer then re-created it from turbo state mid-run — leaving
+	# a stale turbo save that the next NORMAL launch would load, silently replacing the developer's
+	# game. It is also pure waste headless (JSON.stringify over 4096 tiles every 60 real seconds).
+	# Parsed here rather than read off TurboRunner: SaveLoadManager is autoload #9 and TurboRunner
+	# is #10, so TurboRunner._ready() has not run yet.
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--turbo="):
+			print("[M10:AutoSave] Auto-save disabled (turbo run).")
+			return
+
 	var timer := Timer.new()
 	timer.wait_time = AUTO_SAVE_INTERVAL
 	timer.autostart = true

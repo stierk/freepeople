@@ -66,6 +66,16 @@ func _ready() -> void:
 		get_tree().quit(2)
 		return
 
+	# M35: stop SimulationManager's engine-driven _process SYNCHRONOUSLY, here, rather than only in
+	# the deferred _wait_for_bootstrap below. SimulationManager has no _ready(), so set_process
+	# defaults to true and the engine dispatches _process(real_delta) to it; MessageQueue flushes
+	# call_deferred AFTER the _process dispatch in SceneTree::process(). So a single leaked frame
+	# would push a wall-clock delta into sim_time and advance_flow_clock and break reproducibility.
+	# It happens to work today only because the main scene is instantiated before the first frame,
+	# so _wait_for_bootstrap finds the Town Hall immediately and never awaits — an ordering accident
+	# the whole benchmark would otherwise rest on.
+	SimulationManager.set_process(false)
+
 	# Always bootstrap fresh: an existing save game would send World._ready() down the
 	# load branch instead of the new-game branch (see World.gd _ready).
 	if FileAccess.file_exists(SaveLoadManager.SAVE_PATH):
