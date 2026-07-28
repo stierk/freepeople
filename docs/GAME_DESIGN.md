@@ -692,9 +692,32 @@ not an exact history.
     `--turbo-strategy=urgency` matches the implicit default, that an unknown name exits 2, and that a
     normal launch still boots. See §9 for the interface contract and how to add a candidate.
   - **Measurement.** Each finished turbo run appends a row to `user://runs/bench.csv`;
-    `tools/bench.ps1` sweeps seeds × strategies and prints per-strategy mean/stddev. Ranking is on
-    final population with deaths as the penalty; `prof_entropy` (bits, `NONE` excluded) is a
-    diagnostic for the roster-freeze mode, not a target.
+    `tools/bench.ps1` sweeps seeds × strategies and prints per-strategy mean/stddev
+    (`-SummaryOnly` re-reads the file without re-running the sweep, which takes the better part of an
+    hour). Ranking is on final population with deaths as the penalty; `prof_entropy` (bits, `NONE`
+    excluded) is a diagnostic for the roster-freeze mode, not a target.
+
+  **Baseline — `urgency`, 5 seeds × 300 days.** Every later candidate is compared against this:
+
+  | seed | survived | pop | deaths | inh. gold | crown gold | entropy |
+  |---|---|---|---|---|---|---|
+  | 7 | yes | 9 | 2 | 2100 | 0 | 2.419 |
+  | 42 | yes | 7 | 6 | 2300 | 0 | 1.449 |
+  | 123 | yes | 5 | 6 | 2100 | 0 | 0.971 |
+  | 999 | yes | 7 | 5 | 2200 | 0 | 2.236 |
+  | 2024 | yes | 8 | 5 | 2300 | 0 | 2.500 |
+  | **mean** | **5/5** | **7.20** ±1.48 | **4.80** ±1.64 | | | **1.915** ±0.672 |
+
+  Two things stand out and are *not* strategy problems, so no candidate should be expected to fix
+  them alone. **The Crown treasury is empty on every seed** — the inverse of the M34 capital-formation
+  note: production now works, so the crown backstop keeps buying, while `basic_income` keeps paying
+  out to a population that no longer earns it back. And the settlement **shrinks** on every seed
+  (10 colonists → 5–9, with 2–6 starvation deaths) even though all five formally survive. Survival is
+  currently a weak discriminator; population and deaths carry the signal.
+
+  Entropy spread is wide (0.971–2.500 across seeds at identical code), which is the quantitative
+  restatement of the M34 lesson: **a single seed cannot tell you whether a strategy diversifies the
+  roster.**
 
   No behaviour change in this strand — writing an actual *second* strategy is deliberately left as
   follow-up work, so that a candidate's numbers can be attributed to the candidate rather than to the

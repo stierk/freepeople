@@ -41,7 +41,10 @@ param(
     [string]$Godot = "$env:USERPROFILE\.godot_tools\Godot_v4.6.3-stable_win64_console.exe",
     [string]$Project = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
     [switch]$Fresh,
-    [switch]$Force
+    [switch]$Force,
+    # Skip the runs and just re-print the summary for rows already in bench.csv. A full sweep takes
+    # the better part of an hour, so re-reading its result must not mean re-running it.
+    [switch]$SummaryOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,7 +79,7 @@ if ($Godot -notmatch '_console\.exe$') {
 # back, so refuse to run instead of "protecting" the file into an older state.
 $live = @(Get-CimInstance Win32_Process -Filter "Name like 'Godot%'" |
     Where-Object { $_.CommandLine -and $_.CommandLine -match 'freepeople' -and $_.CommandLine -notmatch '--headless' })
-if ($live.Count -gt 0) {
+if ($live.Count -gt 0 -and -not $SummaryOnly) {
     $pids = ($live | ForEach-Object { $_.ProcessId }) -join ', '
     $msg = "A non-headless Godot instance of this project is running (PID $pids). It rewrites " +
            "savegame.json on a timer, and it competes for CPU with the benchmark."
@@ -93,11 +96,11 @@ if ($live.Count -gt 0) {
 # back to whatever it looked like when the sweep started. Leaving the file alone is strictly safer
 # than "protecting" it into an older state.
 $backup = $null
-if ((Test-Path $SavePath) -and ($live.Count -eq 0)) {
+if ((Test-Path $SavePath) -and ($live.Count -eq 0) -and (-not $SummaryOnly)) {
     $backup = Join-Path $env:TEMP ("freepeople_savegame_{0}.bak" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
     Copy-Item $SavePath $backup -Force
     Write-Host "Backed up savegame.json -> $backup" -ForegroundColor DarkGray
-} elseif ($live.Count -gt 0) {
+} elseif ($live.Count -gt 0 -and -not $SummaryOnly) {
     Write-Host "Leaving savegame.json alone - the live instance owns it." -ForegroundColor DarkGray
 }
 
@@ -110,8 +113,11 @@ $total = $Seeds.Count * $Strategies.Count
 $index = 0
 $startedAt = Get-Date
 
+if ($SummaryOnly) { $total = 0 }
+
 try {
-    foreach ($strategy in $Strategies) {
+    if ($SummaryOnly) { Write-Host "-SummaryOnly: re-reading bench.csv, not running anything." -ForegroundColor DarkGray }
+    foreach ($strategy in ($Strategies | Where-Object { -not $SummaryOnly })) {
         foreach ($seed in $Seeds) {
             $index++
             # Sequential on purpose: RunRecorder names its per-run files from a second-resolution
