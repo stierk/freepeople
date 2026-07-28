@@ -31,6 +31,14 @@ const RUNS_DIR := "user://runs"
 ## Real-time seconds between two file flushes of the buffered lines.
 const FLUSH_INTERVAL := 5.0
 
+## M35: one row per finished turbo run, accumulated ACROSS runs (unlike the per-run metrics CSV),
+## so tools/bench.ps1 can sweep seeds × strategies and compare them. Written from here rather than
+## from TurboRunner because everything it needs already lives here: RUNS_DIR, the _append_lines
+## primitive, _cumulative_deaths, and the avg_hunger / inhabitants_gold definitions used by
+## sample_metrics — recomputing those elsewhere would let the two definitions drift apart.
+const BENCH_PATH := "user://runs/bench.csv"
+const BENCH_HEADER := "strategy,seed,days,survived,population,deaths,avg_hunger,inhabitants_gold,crown_gold,prof_entropy"
+
 var _metrics_path: String = ""
 var _events_path: String = ""
 var _metrics_buffer: PackedStringArray = []
@@ -264,6 +272,69 @@ func flush_now() -> void:
 	if not RECORD_ENABLED:
 		return
 	_flush_buffers()
+
+
+## M35: appends one summary row for a finished turbo run, creating bench.csv with its header the
+## first time. Deliberately NOT guarded by RECORD_ENABLED: TurboRunner calls this explicitly and
+## writing the row is the entire point of the call. (Benchmarking with RECORD_ENABLED = false would
+## be invalid anyway — sample_metrics reaches MarketExchange.get_price()/crown_remainder(), both of
+## which call _sync() and trim lots, so disabling recording changes simulation outcomes.)
+func append_bench_row(strategy: String, seed_value: int, days: int, survived: bool) -> void:
+	DirAccess.make_dir_recursive_absolute(RUNS_DIR)
+	if not FileAccess.file_exists(BENCH_PATH):
+		var header_file := FileAccess.open(BENCH_PATH, FileAccess.WRITE)
+		if header_file == null:
+			push_error("[Recorder] could not create %s" % BENCH_PATH)
+			return
+		header_file.store_line(BENCH_HEADER)
+		header_file.close()
+		print("[Recorder] Bench:   %s" % ProjectSettings.globalize_path(BENCH_PATH))
+
+	# Same definitions as sample_metrics, on purpose.
+	var gold_sum := 0.0
+	var hunger_sum := 0.0
+	for inh: InhabitantData in GameState.inhabitants:
+		gold_sum += inh.gold
+		hunger_sum += inh.hunger
+	var pop := GameState.inhabitants.size()
+
+	var row: PackedStringArray = [
+		strategy,
+		str(seed_value),
+		str(days),
+		"1" if survived else "0",
+		str(GameState.population_count()),
+		str(_cumulative_deaths),
+		"%.3f" % (hunger_sum / pop if pop > 0 else 0.0),
+		"%.1f" % gold_sum,
+		"%.1f" % GlobalInventory.gold,
+		"%.3f" % _profession_entropy(),
+	]
+	_append_lines(BENCH_PATH, PackedStringArray([",".join(row)]))
+
+
+## M35: Shannon entropy of the final profession distribution, in BITS (log2), with NONE excluded.
+## This is the direct measurement of the roster-freeze failure mode: a village of 8 farmers scores
+## 0.000, one of each of the 7 professions scores log2(7) = 2.807.
+## NONE is excluded deliberately — counting unemployment as its own category would make a decaying
+## settlement (half the roster jobless) read as "diverse".
+## It is a DIAGNOSTIC, not a goal: a settlement can be perfectly diverse and still starve, so rank
+## on population with deaths as the penalty and read this alongside.
+func _profession_entropy() -> float:
+	var counts: Dictionary = {}
+	var total := 0
+	for inh: InhabitantData in GameState.inhabitants:
+		if inh.profession == InhabitantData.Profession.NONE:
+			continue
+		counts[inh.profession] = counts.get(inh.profession, 0) + 1
+		total += 1
+	if total <= 0 or counts.size() < 2:
+		return 0.0  # nobody employed, or everyone in one trade
+	var entropy := 0.0
+	for profession in counts:
+		var p: float = float(counts[profession]) / float(total)
+		entropy -= p * (log(p) / log(2.0))
+	return entropy
 
 
 func _flush_buffers() -> void:

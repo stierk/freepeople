@@ -35,6 +35,9 @@ var _place_storage := false
 ## Exists to verify that the price lever actually reaches profession scoring (M34): the appeal of
 ## the FOOD professions must rise by PROFIT_WEIGHT * (x / BASE_PRICES[FOOD] - 1).
 var _food_price := -1.0
+## M35: the seed actually used, kept for the bench.csv row. -1 = no --turbo-seed given, i.e. the run
+## is not reproducible and should not be compared against anything.
+var _seed_value := -1
 
 
 func _ready() -> void:
@@ -56,7 +59,8 @@ func _ready() -> void:
 			# code are then not comparable, which is what made earlier balance passes rely on
 			# eyeballing variance across runs (see the M27 note in EconomyManager.gd).
 			# This must happen in an autoload's _ready(), i.e. before World._ready() draws.
-			seed(int(a.substr(13)))
+			_seed_value = int(a.substr(13))
+			seed(_seed_value)
 	if not _turbo_requested:
 		return
 
@@ -202,6 +206,9 @@ func _finish(survived: bool) -> void:
 	RunRecorder.flush_now()
 	var day := SimulationManager.get_current_day()
 	var pop := GameState.population_count()
+	# M35: machine-readable summary for tools/bench.ps1, appended across runs. The human-readable
+	# RESULT= line below and the exit codes stay exactly as they were — both are relied on.
+	RunRecorder.append_bench_row(EconomyManager.strategy_name(), _seed_value, day, survived)
 	if survived:
 		print("[Turbo] RESULT=SURVIVED day=%d population=%d crown_gold=%.1f" % [day, pop, GlobalInventory.gold])
 	else:
