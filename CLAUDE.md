@@ -57,7 +57,7 @@ tone from turning arbitrarily cruel.
 | `GameState` | Inhabitant roster, population count, spawning, `game_over` signal |
 | `SimulationManager` | Master tick loop + inhabitant FSM; time/speed, hunger, farming, gathering — the big one |
 | `BuildingManager` | Building instances, profession↔building mapping, trade-building set, maintenance |
-| `EconomyManager` | Profession assignment (`pick_best_profession`/`profession_scores`), flow-aware demand & urgency |
+| `EconomyManager` | Rolling production/consumption flow tracker; delegates profession choice to a swappable `ProfessionStrategy` (M35) |
 | `MarketManager` | Decentralized exchanges (+ `scripts/data/market_exchange.gd`), matching, pricing |
 | `SaveLoadManager` | Serialize/restore world, buildings, inhabitants, market, gold |
 | `RunRecorder` | Per-run KPI CSV + events JSONL under `user://runs` |
@@ -68,6 +68,14 @@ Data model (`scripts/data/`): `goods.gd` (`GoodType`: WOOD, PLANKS, STONE, FOOD,
 `building_def.gd` (`BuildingType`) with `.tres` in `resources/data/building_defs/`,
 `inhabitant_data.gd` (profession, state machine, inventory cap 10 + food reserve 2, gold, hunger),
 `tile_data.gd` (terrain/path/crop enums). UI in `scenes/ui/`, agent visuals in `scenes/agents/`.
+
+**Profession strategies (`scripts/economy/`, M35):** profession choice is the most decisive mechanic
+in the sim, so it sits behind `ProfessionStrategy` and can be swapped with `--turbo-strategy=<name>`
+(default `urgency` = `strategy_urgency.gd`, the M34 algorithm). Benchmark candidates against a fixed
+seed set with `tools/bench.ps1`; results accumulate in `user://runs/bench.csv`. `profession_scores`
+(pull) and `is_good_scarce` (hold) read one signal and **must stay in the same strategy** — splitting
+them reintroduces the pull/hold disagreement M34 fixed. Details →
+**[`docs/GAME_DESIGN.md` §9](docs/GAME_DESIGN.md#9-persistence--telemetry)**.
 
 **Evolutionary traits (M28):** every inhabitant spawns with six random `[0,1]` traits, each with
 exactly one benefit and one drawback — Speed (+move speed / +food need), Strength (+carry capacity
@@ -82,7 +90,13 @@ future-reproduction notes → **[`docs/GAME_DESIGN.md` §12](docs/GAME_DESIGN.md
   (comments were translated from German in M30 — see the milestone log).
 - **Save compatibility:** enums (`GoodType`, `BuildingType`, `State`, `CropStage`, …) are serialized as
   ints. **Only append** new enum values — never reorder or insert (see the note in `goods.gd`).
-- Features are tagged with milestone markers `Mxx` (M7–M34) in comments; grep them to trace when/why
+- Features are tagged with milestone markers `Mxx` (M7–M35) in comments; grep them to trace when/why
   a system was added. A milestone log is in `docs/GAME_DESIGN.md`.
 - Tuning constants live at the top of their manager (`SimulationManager` holds most balance values:
   `DAY_LENGTH_SECONDS`, crop timers, hunger/starvation, market margins, repair, throttles).
+  **Exception (M35):** a profession strategy's constants live in the strategy class, not in
+  `EconomyManager` — they *are* the algorithm, and leaving them behind would make a second strategy
+  silently inherit the first one's tuning.
+- **`class_name` needs a project scan.** `.godot/` is gitignored, so after adding a script with a new
+  `class_name` a headless run fails with "Could not find type X" until
+  `godot --headless --path <project> --import` has been run once.

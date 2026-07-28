@@ -371,11 +371,78 @@ Grain accumulates up to the Farm House `carry_capacity` (3), then the farmer del
 - **TurboRunner** (`--turbo=<days>`): dev-only headless fast-forward. `--turbo-seed=<n>` (M34) makes
   a run bit-reproducible — without it `World` seeds terrain from an engine-autoseeded `randi()`, so
   two runs of identical code are not comparable and any A/B is reading noise. `--turbo-step`,
-  `--turbo-storage` (place a Storage Yard + Granary as a foresightful player would) and
-  `--turbo-food-price=<x>` (set the crown's Food Sell price, to test the policy lever headlessly)
-  round it out. Behaviour-neutral refactors should be verified as a byte-identical CSV diff at a
-  fixed seed; behaviour-changing ones need a spread of seeds, since single runs mislead badly.
+  `--turbo-storage` (place a Storage Yard + Granary as a foresightful player would),
+  `--turbo-food-price=<x>` (set the crown's Food Sell price, to test the policy lever headlessly) and
+  `--turbo-strategy=<name>` (M35, see below) round it out. Behaviour-neutral refactors should be
+  verified as a byte-identical CSV diff at a fixed seed; behaviour-changing ones need a spread of
+  seeds, since single runs mislead badly.
+  Reproducibility is load-bearing and slightly fragile: `TurboRunner` disables `SimulationManager`'s
+  engine-driven `_process` **synchronously** in `_ready()` (M35) because `MessageQueue` flushes
+  `call_deferred` *after* the `_process` dispatch, so a deferred disable could let one wall-clock
+  delta into `sim_time`. A full audit found **zero** `RandomNumberGenerator.new()` instances and no
+  `randomize()` anywhere, so every draw is covered by the global `seed()`.
+  Turbo also suppresses `SaveLoadManager`'s auto-save timer (M35) — it used to re-create
+  `savegame.json` from turbo state mid-run, leaving a stale save the next normal launch would load.
 - **GlobalInventory** exposes aggregate community stock and emits change notifications for the UI.
+
+### Swappable profession strategies + benchmark (M35)
+
+Profession choice decides whether the food chain staffs itself or the roster freezes (§4), and it had
+been evaluated by eyeballing one turbo run at a time. That misled outright during M34: the inspected
+seed turned out to be the *worst* of five for the change under test, and the single-seed read
+suggested a regression the 5-seed mean contradicted.
+
+The algorithm therefore lives behind `ProfessionStrategy` (`scripts/economy/profession_strategy.gd`),
+a `RefCounted` declaring exactly four entry points — `assign_profession_for_new_inhabitant`,
+`pick_best_profession`, `profession_scores`, `is_good_scarce` — plus `strategy_name()`. Base
+implementations `push_error` rather than returning a plausible value, so a half-implemented strategy
+fails loudly instead of quietly biasing a benchmark.
+
+- **`profession_scores` (pull) and `is_good_scarce` (hold) must be implemented by the same strategy.**
+  They read one signal; splitting them across strategies reintroduces exactly the pull/hold
+  disagreement M34 fixed, where Farmer/Miller were effectively unfireable while Baker/Hunter had no
+  protection at all.
+- `profession_scores` must be **deterministic and must not draw from the global RNG** — it is sampled
+  once per game day into the `appeal_<PROF>` columns and read by the hut-reuse gate, so drawing there
+  would shift a seeded run.
+- **What is *not* strategy:** `EconomyManager`'s rolling production/consumption flow tracker is shared
+  infrastructure. The seam is narrow — a strategy needs only `EconomyManager.supply_rate(good)` and
+  `measured_consumption_rate(good)` back.
+- A strategy's tuning constants live **in the strategy class**, deliberately against the usual
+  "constants at the top of their manager" convention: they are the algorithm, and leaving them in
+  `EconomyManager` would make the next strategy silently inherit them.
+
+Adding a candidate: subclass `ProfessionStrategy`, return a new `strategy_name()`, and add one arm to
+the `match` in `EconomyManager._make_strategy`. An unknown `--turbo-strategy=` is `push_error` +
+exit 2, never a silent fallback to the default.
+
+**Benchmark.** Every finished turbo run appends one row to `user://runs/bench.csv` (accumulated
+across runs, unlike the per-run files), written by `RunRecorder.append_bench_row` so it reuses the
+same `avg_hunger` / `inhabitants_gold` / `_cumulative_deaths` definitions as the metrics CSV:
+
+```
+strategy,seed,days,survived,population,deaths,avg_hunger,inhabitants_gold,crown_gold,prof_entropy
+```
+
+`prof_entropy` is the Shannon entropy of the final profession distribution in **bits (log2), with
+`NONE` excluded** — the direct measurement of the roster-freeze failure mode (8 farmers → 0.000; one
+of each of the 7 professions → 2.807). `NONE` is excluded on purpose: counting unemployment as a
+category would make a decaying settlement read as "diverse".
+
+`tools/bench.ps1` sweeps `seeds × strategies` (defaults: 5 seeds × 300 days) and prints a
+per-strategy mean and sample stddev. **Ranking is on final population, with cumulative deaths as the
+penalty; `prof_entropy` and `avg_hunger` are diagnostics, not targets** — a settlement can be
+perfectly diverse and still starve. There is deliberately no single composite score.
+
+Two operational notes the script encodes, both learned the hard way:
+- Runs are **sequential**: `RunRecorder` names per-run files from a second-resolution timestamp, so
+  two runs starting in the same second collide.
+- On Windows the **`_console` Godot build is required**. Launched from PowerShell, the GUI build
+  produces no stdout *and the run does not execute at all* (no `RESULT=` line, no bench row). The
+  script auto-corrects a GUI path to its `_console` sibling.
+- It refuses to run while a non-headless instance of the project is open (`-Force` overrides), and in
+  that case deliberately does **not** back up/restore `savegame.json`: that process owns the file and
+  rewrites it on a timer, so restoring a copy would roll the player's session back.
 
 ---
 
@@ -602,6 +669,36 @@ not an exact history.
   > where it previously had none — an empty treasury cannot pay the safety net. Seed 7 still ends
   > at 770.5 with 0 deaths. This is the M34 "capital formation" note reappearing from the other
   > side and wants a balance pass, not another bug fix.
+
+  **Swappable profession strategy + benchmark harness.** Third M35 strand, and the reason the two
+  above could be measured at all. Profession choice had only ever been evaluated by eyeballing a
+  single turbo run, which misled outright in M34: the inspected seed turned out to be the *worst* of
+  five for the change under test, so the single-seed read suggested a regression the 5-seed mean
+  contradicted.
+
+  - **Determinism gate first.** Verified at `--turbo=100 --turbo-seed=42` before touching anything:
+    same seed twice → metrics CSV *and* events JSONL byte-identical; seed 42 vs seed 7 → different.
+    An audit found **zero** `RandomNumberGenerator.new()` instances and no `randomize()` anywhere, so
+    the global `seed()` covers every draw, and `NoiseTerrainGenerator` derives all three noise seeds
+    from its argument. Two latent hazards were hardened anyway: `TurboRunner` now disables
+    `SimulationManager`'s engine `_process` **synchronously** (`MessageQueue` flushes `call_deferred`
+    *after* the `_process` dispatch, so a deferred disable could leak one wall-clock delta into
+    `sim_time`), and `SaveLoadManager` skips its auto-save timer under `--turbo=` (it used to
+    re-create `savegame.json` from turbo state mid-run, leaving a stale save the next normal launch
+    would load). Both confirmed behaviour-neutral by byte-diff.
+  - **Extraction (pure refactor).** The M34 algorithm moved verbatim into
+    `scripts/economy/strategy_urgency.gd` behind `ProfessionStrategy`; `EconomyManager` keeps the flow
+    tracker and delegates. Proven byte-identical at a fixed seed — including that an explicit
+    `--turbo-strategy=urgency` matches the implicit default, that an unknown name exits 2, and that a
+    normal launch still boots. See §9 for the interface contract and how to add a candidate.
+  - **Measurement.** Each finished turbo run appends a row to `user://runs/bench.csv`;
+    `tools/bench.ps1` sweeps seeds × strategies and prints per-strategy mean/stddev. Ranking is on
+    final population with deaths as the penalty; `prof_entropy` (bits, `NONE` excluded) is a
+    diagnostic for the roster-freeze mode, not a target.
+
+  No behaviour change in this strand — writing an actual *second* strategy is deliberately left as
+  follow-up work, so that a candidate's numbers can be attributed to the candidate rather than to the
+  refactor.
 
 ---
 
