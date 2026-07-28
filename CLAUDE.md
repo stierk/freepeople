@@ -8,7 +8,8 @@ population above zero. Entry scene: `scenes/main/Main.tscn`.
 > **This file is the always-in-context map** — Claude Code auto-loads it every session, so keep it
 > short. It holds the architecture map, conventions, and the canonical **Story & Setting** (the
 > fiction lives here). For deep mechanics & current state read
-> [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) (not auto-loaded — open on demand). README covers the
+> [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) (not auto-loaded — open on demand); planned but
+> not-yet-implemented changes live in [`docs/BACKLOG.md`](docs/BACKLOG.md). README covers the
 > Android build.
 
 ## Story & Setting
