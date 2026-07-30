@@ -723,6 +723,75 @@ not an exact history.
   follow-up work, so that a candidate's numbers can be attributed to the candidate rather than to the
   refactor.
 
+- **M36** — Double-auction order book. ⚠ **Not verified — do not treat as finished.** Symptom: in the
+  price chart the demand cloud sits far above the supply cloud, yet every deal is with the Crown.
+
+  **Two findings, both confirmed.** First, the chart never showed bids at all:
+  `MarketExchange` recorded `payer.gold / want` as its DEMAND series — a purse divided by a
+  wish, not a price — which is why `MarketChartPlot._price_max` already scaled to the 95th
+  percentile to stop one rich buyer flattening the plot. Second, villagers *structurally could
+  not* trade with each other: `TradeData` seeded `buy_price == sell_price == BASE_PRICES`, so
+  `_seller_offer_price`'s clamp to `[bid, ask]` collapsed onto a single point, every lot landed
+  exactly on the Crown's bid, and the backstop bought it out within one market tick.
+
+  **The rewrite** replaces consignment with an order book (`MarketOrder`, dead since it was first
+  drafted, finished here): villagers post SELL and BUY orders priced by `ReservationPricing` from
+  a market anchor, sellers drifting down and buyers up. The Crown becomes two standing orders at
+  the band edges instead of a special case in the purchase loop.
+
+  **Four measured failures, kept here because each one cost a 5-seed sweep and the reasoning that
+  produced them was wrong in an instructive way.** Against the M35 baseline (pop 7.20, deaths 4.80,
+  5/5):
+
+  | change | pop | deaths | survived | what it actually showed |
+  |---|---|---|---|---|
+  | 0.7/1.3 spread only | 6.80 | 5.20 | 4/5 | roughly neutral; helps 4 seeds, kills one |
+  | + order book | 1.80 | 10.20 | 3/5 | `p2p_share` 0.03–0.09: the Crown still had >90% of volume and now charged a spread for it |
+  | + resting bids | 2.60 | 9.40 | 5/5 | `p2p_share` *fell* over 300 days — it drops when the settlement shrinks, so it is partly an effect, not only a cause |
+  | spread back to 1.0/1.0 | ~0.5 | ~12 | 2/4 | **refuted the spread hypothesis**: identical Crown prices to M35, catastrophically different outcome |
+
+  Two real defects surfaced along the way, both from reading an inhabitant's own state as a price
+  source without checking how it behaves over time. `seller_floor` was `break_even × greed`, and
+  `break_even_unit` is `cost_of_living × time_since_last_sale` — so an unsold order's floor *rose*
+  while its price drifted down, the two crossed without meeting the Crown, and the order could never
+  clear. And `sell_anchor` was the seller's own last sale price with a fixed markup on top: sell at
+  2.0 → open at 2.6 → fill → open at 3.38. One inhabitant ratcheted up to **58% of all gold in the
+  settlement** (1315 of 2278, seed 42 day 90) while everyone else sat at 2 gold and starved. The
+  anchor is now `MarketHistory.recent_deal_price` — what the market actually paid, across all
+  sellers, which no single participant can move.
+
+  **The root cause was never the prices.** A 100-day instrumented run showed `tradevol_villager`
+  at exactly **0.0 for 57 days**, turning non-zero on the very day the treasury hit 0. The Crown
+  starts holding practically the whole food stock (817 of 835) and offers it at `crown_ask`
+  forever, so no villager can be the cheapest seller — and any who drifts low enough to be
+  interesting is bought out by the Crown's own bid first. M35 avoided this by accident: its clamp
+  pinned every ask to exactly `crown_ask`, and M31's tie-break preferred the villager lot on a
+  **tie**. Ranking by price turned a tie the villager wins into a race the Crown wins.
+
+  `_match` therefore uses a **priority ladder, not price priority**: villager-to-villager first
+  even when the Crown is cheaper, then the Crown as buyer of last resort, then as seller of last
+  resort. Price priority applies only *among* villagers. `_settlement_price` follows normal
+  exchange practice — the resting order names the price, the arriving one accepts; the midpoint
+  applies only when both have waited and drifted into each other (splitting unconditionally made a
+  hungry buyer with a 3× walk-away price pay 4.3 against an ask of 2.6).
+
+  **State at hand-off.** The ladder restores villager trade immediately (`tradevol_villager`
+  non-zero from day 6, exceeding Crown volume by day 18), but the 60-day smoke test **ends before
+  the cliff** — in the comparison run the deaths came on days 64–66. `crown_gold` still drains to
+  0 and `gold_min` still pins at 2.0, both unchanged. `TradeData` is left at the diagnostic
+  `1.0/1.0`, not a shipping value. **A full 5-seed sweep is the next step, and a rollback is a
+  legitimate outcome.**
+
+  **Kept regardless of that outcome:** `RunRecorder.p2p_share` plus the `tradevol_villager` /
+  `tradevol_crown` metrics columns (without them this would have read as "order book broken"
+  rather than "order book half-finished"); `MarketHistory.recent_deal_price`; and the honest
+  DEMAND series. ⚠ **Never rank on `p2p_share` alone** — it looks healthy in a dying settlement,
+  because a village of two has nobody left to trade with. Read it beside population.
+
+  **Also confirmed as pre-existing, independent of M36:** `crown_gold` reaches 0 in all five *M35
+  baseline* runs too. The Crown buys up surpluses nobody buys back, so gold flows one way. That is
+  the mechanism behind the reported symptom and is worth its own milestone.
+
 ---
 
 ## 12. Evolutionary traits (M28)

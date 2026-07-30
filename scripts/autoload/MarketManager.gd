@@ -53,16 +53,20 @@ func pick_best_market(good: int, from_cell: Vector2i, side: int) -> BuildingInst
 	return BuildingManager.get_storage_for_good(good)
 
 
-## Revenue a seller can best achieve at this exchange: the upper bound that
-## MarketExchange._seller_offer_price clamps their lot to. The support price (Buy) counts
-## equally alongside the sell price (Sell) – the producer doesn't care whether a consumer
-## or the crown backstop pays them, as long as more gold comes out in the end.
+## Revenue a seller can best achieve at this exchange: the highest bid standing in its order
+## book. M36: that is now `best_bid()`, which already takes the maximum of the villager bids and
+## the crown's support price — so a seller walks to where the money actually is, whether it
+## belongs to a neighbour or to the crown.
 ##
-## Deliberately NOT exchange.get_price(): that is the ask (cheapest foreign lot) and thus a
-## competitor price, not the seller's own revenue. Going by that would completely ignore the
-## player's support price – exactly the bug that sent farmers to the Town Hall despite a high Buy Price.
+## Up to M35 this was `max(crown_bid, crown_ask)`, i.e. purely the player's two sliders. With an
+## order book that would ignore every villager bid and keep routing producers to whichever
+## storage the crown happens to price highest — the same class of bug as the pre-M34 one where
+## farmers walked to the Town Hall despite a high Buy Price elsewhere.
+##
+## Deliberately NOT exchange.get_price(): that is the ask, a competitor's price, not the
+## seller's own revenue.
 func _seller_revenue(exchange: MarketExchange, good: int) -> float:
-	return maxf(exchange.crown_bid(good), exchange.crown_ask(good))
+	return exchange.best_bid(good)
 
 
 func _market_buildings() -> Array:

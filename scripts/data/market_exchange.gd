@@ -1,44 +1,58 @@
 class_name MarketExchange
 extends RefCounted
 
-## Consignment exchange of a storage yard/granary. Each instance forms its own prices – two
-## granaries can therefore price differently.
+## Double-auction order book of a storage yard/granary. Each instance forms its own prices –
+## two granaries can therefore price differently.
 ##
-## Price model (custom, two decoupled player prices):
-## - **Sell Price** (trade_data.sell_price) = **the crown's sell price to consumers.** At
-##   this price the crown gives away its OWN stock (starting stock, bought-up
-##   backstop purchases) to buyers. See crown_ask().
-## - **Buy Price** (trade_data.buy_price) = **the crown's guaranteed purchase price (support
-##   price) to producers.** It is NOT capped by the sell price anymore – the crown
-##   may support at a higher price than it resells for (agricultural subsidy). See crown_bid().
+## M36: replaces the M20 consignment model. Previously a producer listed a lot at a price
+## clamped into the crown's band and consumers took the cheapest lot; the crown ran as a
+## special case in the purchase loop and as a backstop sweep. With the default band being a
+## single point (buy price == sell price == base price up to M35) every lot landed exactly on
+## the crown's bid and the backstop bought it out within one market tick, so every trade was
+## villager → crown → villager and no price could form. See docs/GAME_DESIGN.md §M36.
 ##
-## Flow (consignment):
-## - The producer delivers their goods and lists them as their own price lot at THEIR desired
-##   price (reservation price = break-even × (1 + margin), clamped to [support price, sell price]).
-##   They are NOT paid yet at this point (offer()).
-## - Consumers (eating food, building input, construction sites) take the CHEAPEST lots first
-##   and pay the proceeds directly to the lot owner (producer). Crown remainder → treasury.
-## - Unsold lots get cheaper with every market tick (price drift), even below
-##   production cost – this creates real sell pressure/loss (tick()).
-## - If a lot falls to the support price (Buy Price), the crown immediately buys it from the
-##   producer out of the treasury; the goods thereby become crown remainder (tick() → _run_crown_backstop).
+## Price model
+## -----------
+## - Villagers post SELL and BUY orders priced from what they themselves know
+##   (ReservationPricing – deliberately free of any crown price). Sellers open high and give
+##   way downward, buyers open low and climb.
+## - **The crown is no longer a special case.** It appears as two standing orders at the edges
+##   of its band: BUY at `crown_bid` (the support price, funded by the treasury) and SELL at
+##   `crown_ask` (its own remaining stock). They never drift and never negotiate.
+## - A villager order therefore only meets the crown once no villager beats it — pure price
+##   priority, no grace timer needed. That the band exists at all is a consequence of these two
+##   orders being in the book, not of any formula: remove them (docs/BACKLOG.md #4, the crown
+##   withdrawing from a good) and the remaining villagers keep trading.
 ##
-## Crown remainder: the part of community_stock NOT covered by producer lots
-## (starting stock, loaded save game, bought-up backstop purchases). It is dynamically handed
-## out to consumers at the current sell price (crown_ask).
+## Settlement
+## ----------
+## Between two villagers the trade settles at the MIDPOINT of bid and ask – they met each other
+## halfway, so they split the surplus. If the crown is one side it settles at the crown's own
+## price: it does not haggle.
+##
+## Goods and presence
+## ------------------
+## Goods live in the owner building's `community_stock` throughout. A fill moves gold
+## immediately but only *reserves* the goods for the buyer (`BuildingInstance.reserved`), who
+## collects them the next time they are physically at the building. A buyer who IS present
+## posts a marketable order (priced at their walk-away point) and drains the reservation on the
+## spot, which reproduces the pre-M36 behaviour of buying straight off the shelf.
 
 const EPS := 0.0001
-## Price decay of an unsold lot per sim second of waiting (balancing knob).
+## Price concession of a resting order per sim second of waiting (balancing knob). Applies to
+## both sides now: sellers come down by this much, buyers go up by it.
 const DRIFT_PER_SEC := 0.02
-## Lowest price a lot can drift to (without a support price it ends here → total loss).
-const MIN_OFFER_PRICE := 0.0
+## How many recent deals `market_anchor` averages over. Long enough that one outlier trade
+## cannot move the settlement's price level, short enough to follow a real shift in scarcity.
+const ANCHOR_SAMPLE := 10
 
 # Untyped (BuildingInstance), to avoid a class reference cycle.
 var owner = null
 var goods: Array = []
-## good -> Array of producer lots, sorted ascending by price. Each lot is a
-## Dictionary {"price", "qty", "owner", "age"} ("owner" = inhabitant ID of the producer).
-var _lots: Dictionary = {}
+## good -> {"buy": Array[MarketOrder] (best/highest first), "sell": Array[MarketOrder]
+## (best/lowest first)}. Crown orders are NOT kept here – they are synthesised per match from
+## the current trade_data, so moving the price slider takes effect immediately.
+var _book: Dictionary = {}
 ## M25: trade chronicle for the price chart (offer/demand/deal + support price line).
 var history := MarketHistory.new()
 
@@ -47,8 +61,12 @@ func setup(p_owner, p_goods: Array) -> void:
 	owner = p_owner
 	goods = p_goods
 	for g in goods:
-		_lots[g] = []
+		_book[g] = {"buy": [], "sell": []}
 
+
+# ---------------------------------------------------------------------------
+# Crown prices (the player's two levers)
+# ---------------------------------------------------------------------------
 
 ## The crown's sell price to consumers (Sell Price, min 0).
 func crown_ask(good: int) -> float:
@@ -59,7 +77,7 @@ func crown_ask(good: int) -> float:
 
 
 ## The crown's guaranteed purchase price to producers (Buy Price, min 0). Deliberately NOT
-## capped by crown_ask – a high support price may exceed the sell price.
+## capped by crown_ask – a high support price may exceed the sell price (agricultural subsidy).
 func crown_bid(good: int) -> float:
 	var f: float = Goods.BASE_PRICES.get(good, 1.0)
 	if owner != null and owner.trade_data != null:
@@ -67,211 +85,384 @@ func crown_bid(good: int) -> float:
 	return maxf(0.0, f)
 
 
-## Price the next purchased unit would cost: the cheapest available offer
-## (crown remainder at the sell price, or the cheapest producer lot). The ask if there's no stock.
+## Whether the crown currently stands on each side of the book. Single place to switch off, so
+## docs/BACKLOG.md #4 ("price X = the crown does not trade this good") becomes a change to
+## these two functions instead of a special case at every call site.
+func crown_sells(good: int) -> bool:
+	return crown_ask(good) >= 0.0
+
+
+func crown_buys(good: int) -> bool:
+	return crown_bid(good) > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Book queries
+# ---------------------------------------------------------------------------
+
+## What this good has recently been changing hands for here — the single number every villager
+## order is priced from (see ReservationPricing). Falls back to the base price until something
+## has actually traded, so a fresh exchange still produces sane opening prices.
+func market_anchor(good: int) -> float:
+	var p := history.recent_deal_price(good, ANCHOR_SAMPLE)
+	return p if p > 0.0 else float(Goods.BASE_PRICES.get(good, 1.0))
+
+
+## Price the next purchased unit would cost: the best ask in the book, crown included.
 func get_price(good: int) -> float:
 	_sync(good)
-	var stock: float = owner.community_stock.get(good, 0.0) if owner != null else 0.0
-	var lots: Array = _lots.get(good, [])
-	var lot_total := _lot_total(good)
 	var best := INF
-	if stock - lot_total > EPS:
-		best = crown_ask(good)
-	if not lots.is_empty():
-		best = minf(best, lots[0]["price"])
+	var sells: Array = _sells(good)
+	if not sells.is_empty():
+		best = sells[0].price
+	if crown_sells(good) and crown_remainder(good) > EPS:
+		best = minf(best, crown_ask(good))
 	return crown_ask(good) if best == INF else best
 
 
-## Consignment: the producer (seller) delivers goods into storage and lists them as their own
-## price lot at their desired price. They are NOT paid yet – payment only happens
-## when a buyer takes the lot (_purchase) or the crown buys it up at the support price
-## (tick). Without a seller the goods land directly as crown remainder. Returns the accepted
-## amount (< quantity if storage is full).
-func offer(good: int, quantity: float, seller) -> float:
+## Best price a seller could currently get here: the highest bid in the book, crown included.
+## Used by MarketManager to route sellers to the exchange where the money actually is.
+func best_bid(good: int) -> float:
 	_sync(good)
+	var best := -INF
+	var buys: Array = _buys(good)
+	if not buys.is_empty():
+		best = buys[0].price
+	if crown_buys(good):
+		best = maxf(best, crown_bid(good))
+	return 0.0 if best == -INF else best
+
+
+## This good's crown remainder: community stock covered neither by a villager SELL order nor by
+## a reservation already paid for. Public for telemetry (GlobalInventory.get_crown_total).
+func crown_remainder(good: int) -> float:
+	var stock: float = owner.community_stock.get(good, 0.0) if owner != null else 0.0
+	return maxf(0.0, stock - _sell_total(good) - _reserved_total(good))
+
+
+# ---------------------------------------------------------------------------
+# Posting orders
+# ---------------------------------------------------------------------------
+
+## Consignment delivery: the producer puts goods into storage and posts a resting SELL order
+## for them. They are NOT paid until it fills. Without a seller the goods land directly as
+## crown remainder (no order). Returns the accepted amount (< quantity if storage is full).
+func offer(good: int, quantity: float, seller) -> float:
 	var accepted := minf(quantity, owner.stock_space(good))
 	if accepted <= 0.0:
 		return 0.0
 	owner.community_stock[good] = owner.community_stock.get(good, 0.0) + accepted
 	if seller != null:
-		var ask := _seller_offer_price(good, seller)
-		_add_lot(good, ask, accepted, seller.id)
-		history.record(good, MarketHistory.Kind.OFFER, ask)
+		var open := ReservationPricing.seller_open(seller, market_anchor(good))
+		var floor_price := ReservationPricing.seller_floor(seller)
+		_post(MarketOrder.make(MarketOrder.Side.SELL, good, MarketOrder.OwnerKind.VILLAGER,
+			seller.id, accepted, open, floor_price))
+		history.record(good, MarketHistory.Kind.OFFER, open)
 		# M34: domestic production, for EconomyManager's flow-based urgency. Deliberately only
-		# when there IS a seller – ownerless crown remainder is stock appearing, not the settlement
-		# producing, and counting it would mask exactly the deficit urgency is meant to detect.
+		# when there IS a seller – ownerless crown remainder is stock appearing, not the
+		# settlement producing, and counting it would mask the deficit urgency is meant to detect.
 		EconomyManager.note_production(good, accepted)
-	# seller == null: goods remain ownerless crown remainder (no lot).
+		_match(good)
 	return accepted
 
 
-## Immediate direct sale to the crown at the support price (Buy Price), paid instantly out of
-## the treasury. For emergencies (a hungry, broke inhabitant needs cash right now for
-## food) – consignment would let them starve. The goods go into storage as crown remainder;
-## if the treasury is empty they're still accepted (proceeds then partial/0). Returns the
-## accepted amount.
+## Immediate direct sale to the crown at the support price, paid instantly out of the treasury.
+## For emergencies (a hungry, broke inhabitant needs cash right now for food) – a resting order
+## would let them starve. Returns the accepted amount.
 func sell_to_crown_now(good: int, quantity: float, seller) -> float:
-	_sync(good)
 	var accepted := minf(quantity, owner.stock_space(good))
 	if accepted <= 0.0:
 		return 0.0
 	var price := crown_bid(good)
 	owner.community_stock[good] = owner.community_stock.get(good, 0.0) + accepted
 	history.record(good, MarketHistory.Kind.DEAL, price)
-	RunRecorder.record_trade(good, accepted)
+	RunRecorder.record_trade(good, accepted, RunRecorder.Party.CROWN)
 	if seller != null:
 		EconomyManager.note_production(good, accepted)  # M34: see offer()
 	var payout := minf(price * accepted, GlobalInventory.gold)
 	if payout > 0.0 and GlobalInventory.spend_gold(payout) and seller != null:
-		seller.gold += payout
-		seller.last_sale_unit_price = price
-		seller.time_since_last_sale = 0.0
-		if seller.node_ref != null:
-			seller.node_ref.show_gold_delta(payout)
-	# M26: subsidy/tariff also applies to direct sales (one good, one call – fetch the rate directly).
+		_credit_seller(seller, price, payout)
+	# M26: subsidy/tariff also applies to direct sales.
 	_apply_subsidy(seller, accepted, BuildingManager.get_subsidy(good))
 	return accepted
 
 
-## Consumes goods (building material, repair, profession raw material). Takes the cheapest
-## lots first, limited by the payer's OWN budget (M31: no crown shortfall cover here, unlike
-## the old behavior – an inhabitant who can't afford it simply doesn't get it) and by
-## `max_price`, a personal price ceiling/willingness to pay (see
-## SimulationManager._willingness_to_pay: starts at the fair market price, rises toward the
-## buyer's wealth the longer they've waited). Returns the amount taken.
+## Consumes goods (building material, repair, profession raw material) for a buyer who is
+## PHYSICALLY PRESENT: posts a marketable BUY at their walk-away price, matches at once and
+## hands over whatever filled. `max_price` caps that walk-away point (the caller's own ceiling);
+## nothing is left resting, so the trip either yields goods or does not, exactly as before M36.
 func consume(good: int, quantity: float, payer = null, max_price: float = INF) -> float:
-	return _purchase(good, quantity, payer, payer != null, max_price)["taken"]
+	return _buy_now(good, quantity, payer, max_price)["taken"]
 
 
-## A hungry inhabitant (payer) buys food: cheapest lots first, limited by their
-## budget (free/discounted lots first → even broke inhabitants can take free
-## food). Returns {"taken", "unit_price"}.
+## A hungry inhabitant buys food, present at the granary. Returns {"taken", "unit_price"}.
 func buy_food(good: int, quantity: float, payer) -> Dictionary:
-	var result := _purchase(good, quantity, payer, true)
+	var result := _buy_now(good, quantity, payer, INF)
 	var taken: float = result["taken"]
 	var cost: float = result["cost"]
 	var unit := (cost / taken) if taken > 0.0 else get_price(good)
 	return {"taken": taken, "unit_price": unit}
 
 
-## Core purchase routine: takes up to `want` units, always the cheapest available source
-## (crown remainder at the sell price, or the cheapest producer lot) first. With
-## `limit_to_budget` (food, building/repair/raw-material) the amount is capped by the buyer's
-## gold. `max_price` (M31) additionally excludes any source priced above it – a personal
-## willingness-to-pay ceiling; since sources are considered cheapest-first, once the cheapest
-## remaining one exceeds it nothing cheaper is left, so the loop stops. The proceeds are
-## booked immediately: crown remainder → treasury; producer lot → its owner, where the buyer
-## pays what they can and the crown covers any shortfall (only relevant when `limit_to_budget`
-## is false). Returns {"taken", "cost"} (cost = nominal value).
-func _purchase(good: int, want: float, payer, limit_to_budget: bool, max_price: float = INF) -> Dictionary:
+## Shared path for a present buyer. The ceiling comes from ReservationPricing (food: hunger
+## ceiling; raw material: what the recipe makes it worth), further capped by `max_price` and
+## always by the buyer's own gold.
+func _buy_now(good: int, want: float, payer, max_price: float) -> Dictionary:
 	_sync(good)
-	# Record demand BEFORE reconciling against stock: willingness to pay per
-	# desired unit applies even when storage is empty and the buyer comes away empty-handed.
-	# This unmet demand is exactly what the chart should show.
-	if payer != null and want > EPS:
-		history.record(good, MarketHistory.Kind.DEMAND, payer.gold / want)
-	var stock: float = owner.community_stock.get(good, 0.0)
-	want = minf(want, stock)
-	if want <= 0.0:
+	if payer == null or want <= EPS:
 		return {"taken": 0.0, "cost": 0.0}
-	var lots: Array = _lots.get(good, [])
-	var crown_qty := maxf(0.0, stock - _lot_total(good))
-	var crown_price := crown_ask(good)
-	var sub_rate := BuildingManager.get_subsidy(good)  # M26: once per purchase (perf)
-	var budget: float = payer.gold if payer != null else INF
-	var taken := 0.0
-	var cost := 0.0
-	while want > EPS:
-		var have_lot := not lots.is_empty()
-		var lot_price: float = lots[0]["price"] if have_lot else INF
-		# M31: strict `<` (was `<=`) — at an EQUAL price, prefer the producer's lot over crown
-		# remainder, so inhabitant food/goods sellers (esp. hunters/bakers) actually get the sale
-		# and money keeps circulating among inhabitants instead of leaking into the crown treasury.
-		# The crown cushion is still used when it is strictly cheaper, or when no lot exists.
-		var use_crown := crown_qty > EPS and (not have_lot or crown_price < lot_price)
-		if not use_crown and not have_lot:
-			break
-		var price: float = crown_price if use_crown else lot_price
-		if price > max_price:
-			# M31: cheapest remaining source is already too expensive for the buyer's current
-			# willingness to pay - crown price is fixed and lots only get pricier from here, so
-			# nothing left in this loop will be cheaper. Whatever was taken so far stands.
-			break
-		var src_qty: float = crown_qty if use_crown else lots[0]["qty"]
-		var q := minf(src_qty, want)
-		if limit_to_budget and price > 0.0 and budget < INF:
-			q = minf(q, budget / price)
-		if q <= EPS:
-			break
-		var portion := q * price
-		var payer_pays: float = portion if payer == null else minf(portion, maxf(0.0, budget))
-		if use_crown:
-			# Crown remainder: the buyer pays (as much as they can) to the treasury.
-			GlobalInventory.add_gold(payer_pays)
-			crown_qty -= q
-		else:
-			# Producer lot: the owner gets the full proceeds; a shortfall from the
-			# buyer is covered by the crown (as far as its gold allows).
-			var from_crown := 0.0
-			var shortfall := portion - payer_pays
-			if shortfall > EPS:
-				from_crown = minf(shortfall, GlobalInventory.gold)
-				if from_crown > 0.0:
-					GlobalInventory.spend_gold(from_crown)
-			var lot_seller = _credit_lot_owner(lots[0]["owner"], price, payer_pays + from_crown)
-			_apply_subsidy(lot_seller, q, sub_rate)  # M26
-			lots[0]["qty"] -= q
-			if lots[0]["qty"] <= EPS:
-				lots.remove_at(0)
-		if payer != null and payer_pays > 0.0:
-			payer.gold -= payer_pays
-			budget -= payer_pays
-			if payer.node_ref != null:
-				payer.node_ref.show_gold_delta(-payer_pays)
-		history.record(good, MarketHistory.Kind.DEAL, price)
-		RunRecorder.record_trade(good, q)
-		taken += q
-		cost += portion
-		want -= q
-	if taken > 0.0:
-		owner.community_stock[good] = stock - taken
-		# M34: booked once per purchase, not inside the per-lot loop above – `taken` is already the
-		# summed amount that actually left community stock.
-		EconomyManager.note_consumption(good, taken)
-	return {"taken": taken, "cost": cost}
+	var ceiling := _buyer_ceiling(good, payer)
+	ceiling = minf(ceiling, max_price)
+	# The chart's demand series is now a real bid, not gold/quantity as up to M35.
+	history.record(good, MarketHistory.Kind.DEMAND, ceiling)
+	if ceiling <= 0.0:
+		return {"taken": 0.0, "cost": 0.0}
+	# Marketable: priced AT the walk-away point, so it crosses everything affordable right now.
+	var order := MarketOrder.make(MarketOrder.Side.BUY, good, MarketOrder.OwnerKind.VILLAGER,
+		payer.id, want, ceiling, ceiling)
+	_post(order)
+	_match(good)
+	_withdraw(order)  # a present buyer leaves nothing behind; resting bids go through post_resting_buy
+	return collect_reserved(payer, good, want)
 
 
-## Credits the lot owner (producer) with the sale proceeds and records the price/time
-## of sale (resets time_since_last_sale → break-even drops). Ownerless lots
-## (owner < 0) or an owner that no longer exists flow to the crown. Returns the
-## resolved producer (or null for crown remainder), so the caller can apply the subsidy
-## without looking up the inhabitant a second time (hot purchase loop).
-func _credit_lot_owner(owner_id: int, unit_price: float, amount: float):
-	if owner_id < 0:
-		if amount > 0.0:
-			GlobalInventory.add_gold(amount)
-		return null
-	var seller = GameState.get_inhabitant(owner_id)
+## Standing bid left behind by a buyer who has decided they need something and is on their way.
+## Opens low (ReservationPricing.*_open) and climbs toward their walk-away point as it waits, so
+## it can be met by a villager seller long before its owner arrives — the pre-M36 model had no
+## way to express demand at all except by standing at the counter, which is why the crown ended
+## up the counterparty to almost everything.
+##
+## Replaces any bid this inhabitant already has resting here for the same good: `pick_best_market`
+## may route them elsewhere next time, and stale bids would otherwise pile up and keep buying
+## goods their owner never comes to collect.
+func post_resting_buy(good: int, qty: float, buyer, hut) -> void:
+	if buyer == null or qty <= EPS or not goods.has(good):
+		return
+	withdraw_resting_buy(good, buyer.id)
+	var open: float
+	var ceiling: float
+	if good == Goods.GoodType.FOOD:
+		var anchor := market_anchor(good)
+		open = ReservationPricing.food_open(buyer, anchor)
+		ceiling = ReservationPricing.food_ceiling(buyer, anchor)
+	else:
+		open = ReservationPricing.input_open(buyer, hut)
+		ceiling = ReservationPricing.input_ceiling(buyer, hut)
+	if ceiling <= 0.0:
+		return
+	_post(MarketOrder.make(MarketOrder.Side.BUY, good, MarketOrder.OwnerKind.VILLAGER,
+		buyer.id, qty, open, ceiling))
+	history.record(good, MarketHistory.Kind.DEMAND, open)
+
+
+func withdraw_resting_buy(good: int, buyer_id: int) -> void:
+	var buys: Array = _buys(good)
+	for i in range(buys.size() - 1, -1, -1):
+		if buys[i].owner_id == buyer_id:
+			buys.remove_at(i)
+
+
+## Everything this inhabitant has resting here, on either side. Called when they change trade or
+## die – a stale order would keep trading on behalf of someone who no longer wants it.
+func withdraw_all_for(inhabitant_id: int) -> void:
+	for good in goods:
+		withdraw_resting_buy(good, inhabitant_id)
+		var sells: Array = _sells(good)
+		for i in range(sells.size() - 1, -1, -1):
+			if sells[i].owner_id == inhabitant_id:
+				sells.remove_at(i)
+		_release_reservation(inhabitant_id, good)
+
+
+## Hands a dead or departed inhabitant's paid-for goods back to the crown. Without this they
+## would sit in `reserved` forever: still counted in community_stock, but discounted from
+## crown_remainder and from every seller's available space – permanently out of the market.
+func _release_reservation(inhabitant_id: int, good: int) -> void:
+	var per_inh: Dictionary = owner.reserved.get(inhabitant_id, {})
+	if not per_inh.has(good):
+		return
+	per_inh.erase(good)
+	if per_inh.is_empty():
+		owner.reserved.erase(inhabitant_id)
+	else:
+		owner.reserved[inhabitant_id] = per_inh
+
+
+## What this buyer will pay at most, from their own knowledge only.
+func _buyer_ceiling(good: int, payer) -> float:
+	if good == Goods.GoodType.FOOD:
+		return ReservationPricing.food_ceiling(payer, market_anchor(good))
+	var hut = BuildingManager.get_building(payer.home_building_id)
+	if hut != null and hut.def != null and hut.def.input_good == good:
+		return ReservationPricing.input_ceiling(payer, hut)
+	# Building material and repairs have no recipe behind them: the buyer's purse is the limit.
+	return payer.gold
+
+
+# ---------------------------------------------------------------------------
+# Matching
+# ---------------------------------------------------------------------------
+
+## Crosses the book until nothing reaches anything any more.
+##
+## The order of the three cases below IS the rule, and it is the whole point of M36:
+## **two villagers get first refusal, even when the crown offers a better price.**
+##
+## Price priority (serve whoever is cheapest, crown included) reads as the obviously correct
+## thing and is what the first M36 version did. It made the crown the counterparty to
+## *everything*: measured over a 100-day run, `tradevol_villager` was exactly 0.0 for the first
+## 57 days and only became non-zero on the day the treasury hit 0. The crown starts holding
+## practically the settlement's whole food stock (817 of 835 at day 58) and offers it at
+## `crown_ask` forever, so no villager can ever be the cheapest seller — and the moment one
+## drifts low enough to be interesting, the crown's own bid buys them out first.
+##
+## M35 avoided this by accident: it clamped every villager ask to exactly `crown_ask` and then
+## preferred the villager lot on a TIE (the M31 rule). That is a tie the villager wins. Ranking
+## by price turns the same situation into a race the crown wins. This restores the intent
+## without needing the clamp — which is what let villager prices form freely again.
+##
+## It also matches the fiction: the crown is the safety net, not a competitor (see CLAUDE.md).
+## And it makes docs/BACKLOG.md #4 (the crown withdrawing from a good) a degenerate case of the
+## same rule rather than a special case.
+func _match(good: int) -> void:
+	_sync(good)
+	var guard := 0
+	while guard < 512:
+		guard += 1
+		var v_buy: MarketOrder = _best_affordable_buy(good)
+		var v_sell: MarketOrder = _best_sell(good)
+
+		# 1. Villager to villager, whenever their prices cross.
+		if v_buy != null and v_sell != null and v_buy.price >= v_sell.price - EPS:
+			var price := _settlement_price(v_buy, v_sell)
+			var qty := minf(v_buy.quantity, v_sell.quantity)
+			qty = minf(qty, _affordable(v_buy, price))
+			if qty <= EPS:
+				break
+			_settle(good, qty, price, v_buy, v_sell)
+			continue
+
+		# 2. Crown as the buyer of last resort: a producer nobody wants to buy from.
+		var c_bid := crown_bid(good)
+		if v_sell != null and crown_buys(good) and c_bid >= v_sell.price - EPS:
+			var qty_b := minf(v_sell.quantity, GlobalInventory.gold / c_bid)
+			if qty_b > EPS:
+				_settle(good, qty_b, c_bid, null, v_sell)
+				continue
+
+		# 3. Crown as the seller of last resort: a buyer no producer can supply.
+		var c_ask := crown_ask(good)
+		if v_buy != null and crown_sells(good) and v_buy.price >= c_ask - EPS:
+			var qty_s := minf(v_buy.quantity, crown_remainder(good))
+			qty_s = minf(qty_s, _affordable(v_buy, c_ask))
+			if qty_s > EPS:
+				_settle(good, qty_s, c_ask, v_buy, null)
+				continue
+		break
+
+
+## Price two crossing villager orders settle at.
+##
+## The order that has been RESTING sets the price; the one that just arrived accepts it — normal
+## exchange behaviour, and `age` already tells us which is which. Only when both have been
+## waiting and drifted into each other do they split the difference, because then they really did
+## meet halfway.
+##
+## Splitting the difference unconditionally overcharges badly: a buyer standing at the counter
+## posts a marketable order at their WALK-AWAY price (for food, three times the going rate), so
+## against a resting ask of 2.6 the midpoint would be 4.3 — the hungriest inhabitants would pay
+## the most, which is the opposite of what the drift is meant to do.
+func _settlement_price(buy_order: MarketOrder, sell_order: MarketOrder) -> float:
+	if absf(buy_order.age - sell_order.age) <= EPS:
+		return (buy_order.price + sell_order.price) * 0.5
+	return sell_order.price if sell_order.age > buy_order.age else buy_order.price
+
+
+## How much of `order` its owner can actually pay for at `price`.
+func _affordable(order: MarketOrder, price: float) -> float:
+	if price <= 0.0:
+		return order.quantity
+	var buyer = GameState.get_inhabitant(order.owner_id)
+	return (buyer.gold / price) if buyer != null else 0.0
+
+
+## Books one fill. `buy_order` / `sell_order` are null on whichever side the crown stands.
+func _settle(good: int, qty: float, price: float, buy_order, sell_order) -> void:
+	var value := qty * price
+	var seller = GameState.get_inhabitant(sell_order.owner_id) if sell_order != null else null
+	var buyer = GameState.get_inhabitant(buy_order.owner_id) if buy_order != null else null
+
+	# --- money ---
+	if sell_order == null:
+		# Crown sells its remainder: the buyer pays the treasury.
+		if buyer != null:
+			_charge(buyer, value)
+		GlobalInventory.add_gold(value)
+	elif buy_order == null:
+		# Crown buys at the support price out of the treasury.
+		var payout := minf(value, GlobalInventory.gold)
+		if payout > 0.0 and GlobalInventory.spend_gold(payout):
+			_credit_seller(seller, price, payout)
+	else:
+		if buyer != null:
+			_charge(buyer, value)
+		_credit_seller(seller, price, value)
+	# M26: only real producers are subsidised/taxed, never crown remainder.
+	if sell_order != null:
+		_apply_subsidy(seller, qty, BuildingManager.get_subsidy(good))
+
+	# --- goods ---
+	if sell_order != null:
+		sell_order.quantity -= qty
+		if sell_order.quantity <= EPS:
+			_withdraw(sell_order)
+	if buy_order != null:
+		# Stays physically in community_stock but is set aside for the buyer until they come
+		# past; crown_remainder() and _sync() both discount it. It only leaves stock on pickup
+		# (collect_reserved), so goods are never in two places at once.
+		_reserve(buy_order.owner_id, good, qty, value)
+		EconomyManager.note_consumption(good, qty)
+		buy_order.quantity -= qty
+		if buy_order.quantity <= EPS:
+			_withdraw(buy_order)
+	# else: the crown bought – the goods stay put and simply become crown remainder.
+
+	history.record(good, MarketHistory.Kind.DEAL, price)
+	# Villager-to-villager only when BOTH sides are inhabitant orders — that is exactly the
+	# channel M36 exists to open, so it is the number the milestone is judged on.
+	var party := RunRecorder.Party.VILLAGER if (buy_order != null and sell_order != null) \
+		else RunRecorder.Party.CROWN
+	RunRecorder.record_trade(good, qty, party)
+
+
+# ---------------------------------------------------------------------------
+# Money helpers
+# ---------------------------------------------------------------------------
+
+func _charge(buyer, amount: float) -> void:
+	if amount <= 0.0:
+		return
+	buyer.gold -= amount
+	if buyer.node_ref != null:
+		buyer.node_ref.show_gold_delta(-amount)
+
+
+func _credit_seller(seller, unit_price: float, amount: float) -> void:
 	if seller == null:
 		if amount > 0.0:
-			GlobalInventory.add_gold(amount)
-		return null
+			GlobalInventory.add_gold(amount)  # order of an inhabitant who no longer exists
+		return
 	if amount > 0.0:
 		seller.gold += amount
-		seller.last_sale_unit_price = unit_price
-		seller.time_since_last_sale = 0.0
 		if seller.node_ref != null:
 			seller.node_ref.show_gold_delta(amount)
-	return seller
+	# Resets the break-even clock: see ReservationPricing.seller_floor.
+	seller.last_sale_unit_price = unit_price
+	seller.time_since_last_sale = 0.0
 
 
-## M26: applies the Town Hall subsidy/tariff to a producer sale. Positive = subsidy:
-## the crown pays the producer extra per unit out of the global gold pool
-## (GlobalInventory), capped by its balance. Negative = tariff: the crown deducts from the
-## producer per unit (at most their available gold) and collects it. Ownerless
-## crown remainder (seller == null) is excluded – only real producers are subsidized/taxed.
-## `rate` (= BuildingManager.get_subsidy(good)) is fetched by the caller ONCE per purchase
-## upfront, instead of scanning the Town Hall again per unit in the hot purchase loop.
+## M26: Town Hall subsidy/tariff on a producer sale. Positive = the crown tops the producer up
+## per unit out of the global pool; negative = it deducts a tariff (at most their gold).
 func _apply_subsidy(seller, qty: float, rate: float) -> void:
 	if seller == null or qty <= EPS or absf(rate) <= EPS:
 		return
@@ -291,124 +482,179 @@ func _apply_subsidy(seller, qty: float, rate: float) -> void:
 				seller.node_ref.show_gold_delta(-toll)
 
 
-## A producer's desired price (reservation price): break-even × (1+margin), clamped to
-## [support price, sell price]. Never below the support price (the crown guarantees it anyway),
-## never above the sell price – unless the support price exceeds it, then the support price applies.
-func _seller_offer_price(good: int, seller) -> float:
-	var bid := crown_bid(good)
-	var high := maxf(crown_ask(good), bid)
-	if seller == null:
-		return high
-	SimulationManager.recompute_break_even(seller)
-	var desired: float = seller.break_even_unit * (1.0 + seller.margin * SimulationManager.MARGIN_SCALE)
-	return clampf(desired, bid, high)
+# ---------------------------------------------------------------------------
+# Reservations – goods paid for but not yet picked up
+# ---------------------------------------------------------------------------
+
+## Sets goods aside for a buyer who has already paid. `value` is carried alongside the quantity
+## so the price they actually paid survives until pickup: reconstructing it from the last deal
+## in the chronicle would attribute someone else's price to them, and that number feeds
+## `last_food_unit_price` — the anchor the whole buy side prices from.
+func _reserve(inhabitant_id: int, good: int, qty: float, value: float) -> void:
+	var per_inh: Dictionary = owner.reserved.get(inhabitant_id, {})
+	var entry: Dictionary = per_inh.get(good, {"qty": 0.0, "value": 0.0})
+	entry["qty"] += qty
+	entry["value"] += value
+	per_inh[good] = entry
+	owner.reserved[inhabitant_id] = per_inh
 
 
-## Inserts a producer lot (sorted ascending; same price + same owner
-## are merged, to keep the lot list small).
-func _add_lot(good: int, price: float, qty: float, owner_id: int) -> void:
-	if qty <= 0.0:
-		return
-	var lots: Array = _lots.get(good, [])
-	for lot in lots:
-		if lot["owner"] == owner_id and absf(lot["price"] - price) <= EPS:
-			lot["qty"] += qty
-			return
-	var i := 0
-	while i < lots.size() and lots[i]["price"] < price - EPS:
-		i += 1
-	lots.insert(i, {"price": price, "qty": qty, "owner": owner_id, "age": 0.0})
-	_lots[good] = lots
+## Hands a buyer goods that are already theirs and takes them out of stock. Returns
+## {"taken", "cost"} with the price they really paid, pro-rated if they cannot carry it all.
+func collect_reserved(payer, good: int, max_amount: float) -> Dictionary:
+	var per_inh: Dictionary = owner.reserved.get(payer.id, {})
+	var entry: Dictionary = per_inh.get(good, {"qty": 0.0, "value": 0.0})
+	var have: float = entry["qty"]
+	var taken := minf(have, max_amount)
+	if taken <= EPS:
+		return {"taken": 0.0, "cost": 0.0}
+	var cost: float = entry["value"] * (taken / have)
+	entry["qty"] = have - taken
+	entry["value"] -= cost
+	if entry["qty"] <= EPS:
+		per_inh.erase(good)
+	else:
+		per_inh[good] = entry
+	if per_inh.is_empty():
+		owner.reserved.erase(payer.id)
+	else:
+		owner.reserved[payer.id] = per_inh
+	# Only now do the goods physically leave the building.
+	owner.community_stock[good] = maxf(0.0, owner.community_stock.get(good, 0.0) - taken)
+	return {"taken": taken, "cost": cost}
 
 
-## This good's crown remainder: the part of community_stock NOT covered by producer
-## lots (starting stock, loaded save game, bought-up backstop purchases). Public for
-## telemetry (GlobalInventory.get_crown_total → RunRecorder column "crown remainder").
-func crown_remainder(good: int) -> float:
-	_sync(good)
-	var stock: float = owner.community_stock.get(good, 0.0) if owner != null else 0.0
-	return maxf(0.0, stock - _lot_total(good))
-
-
-func _lot_total(good: int) -> float:
+func _reserved_total(good: int) -> float:
 	var total := 0.0
-	for lot in _lots.get(good, []):
-		total += lot["qty"]
+	if owner == null:
+		return 0.0
+	for per_inh in owner.reserved.values():
+		var entry: Dictionary = per_inh.get(good, {"qty": 0.0})
+		total += entry["qty"]
 	return total
 
 
-func _sort_lots(good: int) -> void:
-	var lots: Array = _lots.get(good, [])
-	lots.sort_custom(func(a, b): return a["price"] < b["price"])
+# ---------------------------------------------------------------------------
+# Book bookkeeping
+# ---------------------------------------------------------------------------
+
+func _buys(good: int) -> Array:
+	return _book.get(good, {}).get("buy", [])
 
 
-## Keeps the sum of producer lots ≤ community_stock. Needed because goods can also leave
-## outside the exchange (withdraw_community fallbacks). Excess is trimmed from the most
-## expensive lots first, so more cheaply offered goods expire last.
-func _sync(good: int) -> void:
-	var lots: Array = _lots.get(good, [])
-	if lots.is_empty():
+func _sells(good: int) -> Array:
+	return _book.get(good, {}).get("sell", [])
+
+
+## Inserts an order, keeping BUY sorted by descending and SELL by ascending price.
+func _post(order: MarketOrder) -> void:
+	if order.quantity <= 0.0:
 		return
+	var list: Array = _buys(order.good) if order.side == MarketOrder.Side.BUY else _sells(order.good)
+	var i := 0
+	if order.side == MarketOrder.Side.BUY:
+		while i < list.size() and list[i].price >= order.price:
+			i += 1
+	else:
+		while i < list.size() and list[i].price <= order.price:
+			i += 1
+	list.insert(i, order)
+
+
+func _withdraw(order: MarketOrder) -> void:
+	var list: Array = _buys(order.good) if order.side == MarketOrder.Side.BUY else _sells(order.good)
+	var i := list.find(order)
+	if i >= 0:
+		list.remove_at(i)
+
+
+func _best_sell(good: int) -> MarketOrder:
+	var sells: Array = _sells(good)
+	return sells[0] if not sells.is_empty() else null
+
+
+## Highest bid whose owner can actually pay for at least a sliver at that price. Skipping the
+## broke ones rather than stopping at them keeps a penniless top bidder from blocking the whole
+## book; their order stays and can fill again once they have money.
+func _best_affordable_buy(good: int) -> MarketOrder:
+	for order in _buys(good):
+		if order.quantity <= EPS:
+			continue
+		var buyer = GameState.get_inhabitant(order.owner_id)
+		if buyer == null:
+			continue
+		if order.price <= 0.0 or buyer.gold > EPS:
+			return order
+	return null
+
+
+func _sell_total(good: int) -> float:
+	var total := 0.0
+	for order in _sells(good):
+		total += order.quantity
+	return total
+
+
+## Keeps the SELL side ≤ what is physically in stock. Needed because goods can also leave
+## outside the book (withdraw_community fallbacks). Trims the most expensive orders first, so
+## the more cheaply offered goods survive longest. Also clears out everything belonging to
+## inhabitants who no longer exist: their orders AND the goods they had already paid for, which
+## would otherwise stay reserved forever and be permanently out of the market.
+func _sync(good: int) -> void:
+	var sells: Array = _sells(good)
+	for i in range(sells.size() - 1, -1, -1):
+		if GameState.get_inhabitant(sells[i].owner_id) == null:
+			sells.remove_at(i)
+	var buys: Array = _buys(good)
+	for i in range(buys.size() - 1, -1, -1):
+		if GameState.get_inhabitant(buys[i].owner_id) == null:
+			buys.remove_at(i)
+	if owner != null:
+		for inhabitant_id in owner.reserved.keys():
+			if GameState.get_inhabitant(inhabitant_id) == null:
+				_release_reservation(inhabitant_id, good)
 	var stock: float = owner.community_stock.get(good, 0.0) if owner != null else 0.0
-	var excess := _lot_total(good) - stock
-	while excess > EPS and not lots.is_empty():
-		var last: Dictionary = lots[lots.size() - 1]
-		if last["qty"] <= excess + EPS:
-			excess -= last["qty"]
-			lots.remove_at(lots.size() - 1)
+	var excess := _sell_total(good) + _reserved_total(good) - stock
+	while excess > EPS and not sells.is_empty():
+		var last: MarketOrder = sells[sells.size() - 1]
+		if last.quantity <= excess + EPS:
+			excess -= last.quantity
+			sells.remove_at(sells.size() - 1)
 		else:
-			last["qty"] -= excess
+			last.quantity -= excess
 			excess = 0.0
 
 
-## Market tick (called by MarketManager every MARKET_TICK_INTERVAL): (1) price drift – every
-## unsold producer lot gets cheaper, down to MIN_OFFER_PRICE (even below
-## break-even). (2) crown support price – lots that have dropped to the purchase price (Buy
-## Price) are bought from the producer by the crown out of the treasury.
+# ---------------------------------------------------------------------------
+# Market tick
+# ---------------------------------------------------------------------------
+
+## Called by MarketManager every MARKET_TICK_INTERVAL: every resting order gives way a little
+## (sellers down toward 0, buyers up toward their ceiling), then the book is crossed.
+##
+## Both limits are fixed for the life of an order. An earlier M36 draft recomputed the seller's
+## floor from `break_even_unit` on every tick, which made it climb as the order aged while its
+## price fell — the two then crossed without meeting the crown and the order could never clear
+## (see ReservationPricing.seller_floor for what that cost).
 func tick() -> void:
+	var step := DRIFT_PER_SEC * MarketManager.MARKET_TICK_INTERVAL
 	for good in goods:
 		_sync(good)
-		# Advance the support-price step line – even without lots, so the line keeps
-		# running when the player adjusts the slider on empty storage.
+		# Advance the support-price step line even without orders, so the chart keeps running
+		# while the player adjusts the slider on empty storage.
 		history.record_bid(good, crown_bid(good))
-		var lots: Array = _lots.get(good, [])
-		if lots.is_empty():
-			continue
-		var drop := DRIFT_PER_SEC * MarketManager.MARKET_TICK_INTERVAL
-		for lot in lots:
-			lot["age"] += MarketManager.MARKET_TICK_INTERVAL
-			lot["price"] = maxf(MIN_OFFER_PRICE, lot["price"] - drop)
-		_sort_lots(good)
-		_run_crown_backstop(good)
+		for order in _sells(good):
+			order.drift(step, MarketManager.MARKET_TICK_INTERVAL)
+		_resort(good, MarketOrder.Side.SELL)
+		for order in _buys(good):
+			order.drift(step, MarketManager.MARKET_TICK_INTERVAL)
+		_resort(good, MarketOrder.Side.BUY)
+		_match(good)
 
 
-## Crown support price: buys every lot whose price has dropped to ≤ Buy Price from the
-## producer at the Buy Price (immediate payment from the treasury). The goods remain in
-## community_stock and thereby become crown remainder. With an empty treasury only as much
-## is bought up as the gold allows – the rest keeps drifting (the producer bears the loss).
-func _run_crown_backstop(good: int) -> void:
-	var bid := crown_bid(good)
-	if bid <= 0.0:
-		return  # no support price set → no buy-ups, goods drift toward 0
-	var sub_rate := BuildingManager.get_subsidy(good)  # M26: once per backstop run (perf)
-	var lots: Array = _lots.get(good, [])
-	while not lots.is_empty():
-		var lot: Dictionary = lots[0]
-		if lot["price"] > bid + EPS:
-			break  # sorted ascending – everything from here is pricier than the support price
-		if GlobalInventory.gold <= 0.0:
-			break
-		var affordable := minf(lot["qty"], GlobalInventory.gold / bid)
-		if affordable <= EPS:
-			break
-		var payout := affordable * bid
-		if not GlobalInventory.spend_gold(payout):
-			break
-		history.record(good, MarketHistory.Kind.DEAL, bid)
-		RunRecorder.record_trade(good, affordable)
-		var seller = _credit_lot_owner(lot["owner"], bid, payout)
-		_apply_subsidy(seller, affordable, sub_rate)  # M26
-		lot["qty"] -= affordable
-		if lot["qty"] <= EPS:
-			lots.remove_at(0)
-		# The goods stay in community_stock (now crown remainder) and get sold at crown_ask.
+func _resort(good: int, side: int) -> void:
+	var list: Array = _buys(good) if side == MarketOrder.Side.BUY else _sells(good)
+	if side == MarketOrder.Side.BUY:
+		list.sort_custom(func(a, b): return a.price > b.price)
+	else:
+		list.sort_custom(func(a, b): return a.price < b.price)

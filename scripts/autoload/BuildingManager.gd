@@ -84,8 +84,10 @@ func register_building(def: BuildingDef, cell: Vector2i) -> BuildingInstance:
 	# (GAME_DESIGN §5), the Town Hall is the ONLY exchange an unattended run will ever have, so
 	# withholding it meant the settlement had no reachable price lever at all and crown_ask/crown_bid
 	# stayed pinned to BASE_PRICES forever (which also capped every producer lot via
-	# _seller_offer_price). TradeData._init seeds both prices from BASE_PRICES, so the fixed-average
-	# behaviour the old comment describes still holds at defaults — it is simply no longer mandatory.
+	# _seller_offer_price). M36: TradeData._init no longer seeds both prices from BASE_PRICES —
+	# it spreads them (see TradeData.DEFAULT_BID_FACTOR / DEFAULT_ASK_FACTOR), so the Town Hall's
+	# old fixed-average behaviour is gone even at defaults. That is the point: a zero spread left
+	# the crown as the counterparty to every trade.
 	# NOTE: deliberately NOT added to TRADE_BUILDING_TYPES — Main.gd uses that array for
 	# "first building of this type is free", and the Town Hall is not player-placeable.
 	elif def.type == BuildingDef.BuildingType.TOWN_HALL:

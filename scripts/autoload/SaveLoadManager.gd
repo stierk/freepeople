@@ -126,8 +126,22 @@ func _serialize_buildings() -> Array:
 				"sell_price": _stringify_keys(b.trade_data.sell_price),
 				"daily_tax": b.trade_data.daily_tax,
 			}
-		# M20: Town Hall policy (subsidy/tariff, basic income). Open exchange orders
-		# are deliberately not persisted (like paths – rebuilt during play).
+		# M36: goods an inhabitant has already PAID for but not yet picked up. Unlike open orders
+		# (below) this cannot be left to rebuild itself – the gold is gone, so dropping it on load
+		# would silently rob the buyer and hand the goods back to the crown.
+		if not b.reserved.is_empty():
+			var reserved: Dictionary = {}
+			for inhabitant_id in b.reserved:
+				var per_good: Dictionary = {}
+				for good in b.reserved[inhabitant_id]:
+					var entry_r: Dictionary = b.reserved[inhabitant_id][good]
+					per_good[str(good)] = {"qty": entry_r["qty"], "value": entry_r["value"]}
+				reserved[str(inhabitant_id)] = per_good
+			entry["reserved"] = reserved
+		# M20: Town Hall policy (subsidy/tariff, basic income). Open exchange ORDERS are
+		# deliberately not persisted (like paths – rebuilt during play): an order is only a
+		# standing intention, its owner re-posts it on their next trip, and nothing has been paid
+		# for it yet. M36 keeps that choice; only the paid-for reservations above are saved.
 		if b.policy != null:
 			entry["policy"] = {
 				"subsidy": _stringify_keys(b.policy.subsidy),
@@ -297,6 +311,22 @@ func _deserialize_building(entry: Dictionary) -> BuildingInstance:
 		# making a loaded world behave differently from a fresh one. Same shape as the policy
 		# fallback below. Defaults come from BASE_PRICES, i.e. the pre-M34 fixed-average behaviour.
 		b.trade_data = TradeData.new()
+
+	# M36: restore goods already paid for and awaiting pickup. Absent in pre-M36 saves, which is
+	# harmless – an old world simply has nobody waiting on a collection.
+	if entry.has("reserved"):
+		var reserved: Dictionary = {}
+		var r_entry: Dictionary = entry["reserved"]
+		for id_key in r_entry:
+			var per_good: Dictionary = {}
+			for good_key in r_entry[id_key]:
+				var e: Dictionary = r_entry[id_key][good_key]
+				per_good[int(good_key)] = {
+					"qty": float(e.get("qty", 0.0)),
+					"value": float(e.get("value", 0.0)),
+				}
+			reserved[int(id_key)] = per_good
+		b.reserved = reserved
 
 	# M20: restore Town Hall policy (or create fresh for old save games).
 	if entry.has("policy"):

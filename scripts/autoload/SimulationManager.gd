@@ -866,6 +866,7 @@ func _abort_stalled_build(inh: InhabitantData, hut: BuildingInstance) -> void:
 		"inhabitant_id": inh.id,
 	})
 	_derelict_building(hut)
+	withdraw_market_orders(inh)  # M36: no standing bids for a trade they no longer practise
 	inh.profession = InhabitantData.Profession.NONE
 	inh.build_stall_timer = 0.0
 	inh.idle_retry_timer = 0.0
@@ -967,12 +968,23 @@ func _check_market_profitability(inh: InhabitantData) -> void:
 		inh.unprofitable_streak = 0
 
 
+## M36: pulls every order this inhabitant has resting in any exchange, and releases goods they
+## already paid for but will never come to collect. Called whenever they change trade or lose
+## their hut: a standing bid for the OLD profession's raw material would otherwise keep buying
+## on their behalf forever, and the reservation would stay locked out of the market.
+func withdraw_market_orders(inh: InhabitantData) -> void:
+	for b: BuildingInstance in BuildingManager.buildings:
+		if b.exchange != null:
+			b.exchange.withdraw_all_for(inh.id)
+
+
 ## Market-driven switch to the most lucrative scarce profession when the work is permanently
 ## unprofitable.
 func try_switch_unprofitable(inh: InhabitantData) -> void:
 	inh.unprofitable_streak = 0
 	var best := EconomyManager.pick_best_profession(inh.profession)
 	if best != inh.profession and best != InhabitantData.Profession.NONE:
+		withdraw_market_orders(inh)
 		print("[M20:JobChange] Inhabitant %d switches from %s to %s (unprofitable)" % [
 			inh.id, InhabitantData.Profession.keys()[inh.profession], InhabitantData.Profession.keys()[best]])
 		RunRecorder.record("jobchange", {
@@ -1047,6 +1059,12 @@ func _start_market_trip(inhabitant: InhabitantData) -> void:
 			print("[STARVE] #%d no market target (pick_best_market==null) → no purchase" % inhabitant.id)
 		return
 	inhabitant.trade_target_id = destination.id
+	# M36: standing bid for food, left before setting off – see _start_input_fetch. A hunter or
+	# baker can fill it while the buyer is still on the road; if nobody does, the bid climbs to
+	# the crown's ask and is served there, so this never delays a meal.
+	if destination.exchange != null:
+		destination.exchange.post_resting_buy(Goods.GoodType.FOOD,
+			_food_purchase_amount(inhabitant), inhabitant, null)
 	inhabitant.path = WorldGrid.find_path(inhabitant.cell, destination.cell)
 	inhabitant.path_index = 0
 	inhabitant.state = InhabitantData.State.MARKET_TRIP
@@ -1516,9 +1534,22 @@ func _start_input_fetch(inhabitant: InhabitantData, hut: BuildingInstance, stora
 	# Remember the target storage, so the inhabitant buys from exactly this one on arrival
 	# (and not from another, in case there are multiple granaries/storages).
 	inhabitant.trade_target_id = storage.id
+	# M36: leave a standing bid before setting off, so a villager seller can meet it while the
+	# buyer is still walking. Without this the book only ever has one side and practically every
+	# trade routes through the crown (measured: p2p_share ~0.06 with the resting bid missing).
+	if storage.exchange != null:
+		storage.exchange.post_resting_buy(hut.def.input_good,
+			_input_fetch_amount(inhabitant, hut), inhabitant, hut)
 	inhabitant.path = WorldGrid.find_path(inhabitant.cell, storage.cell)
 	inhabitant.path_index = 0
 	inhabitant.state = InhabitantData.State.FETCHING_INPUT
+
+
+## How much raw material this trip is for. Shared by the standing bid posted on departure and
+## the purchase made on arrival – if the two drifted apart, a buyer would bid for one amount and
+## then collect a different one.
+func _input_fetch_amount(inhabitant: InhabitantData, hut: BuildingInstance) -> float:
+	return minf(maxf(hut.def.carry_capacity, hut.def.input_amount), inhabitant.inventory_space())
 
 
 ## Two-stage trip analogous to fetching building material: at storage a batch of raw material is
@@ -1546,14 +1577,20 @@ func _handle_fetching_input(inhabitant: InhabitantData) -> void:
 		var storage := BuildingManager.get_building(inhabitant.trade_target_id)
 		if storage == null:
 			storage = BuildingManager.get_storage_for_good(good)
-		var want := minf(maxf(hut.def.carry_capacity, hut.def.input_amount), inhabitant.inventory_space())
+		var want := _input_fetch_amount(inhabitant, hut)
 		var bought := 0.0
 		if storage != null and want > 0.0:
 			if storage.exchange != null:
+				# M36: whatever the standing bid already bought is theirs – collect it first, then
+				# top up over the counter for the rest. The standing bid is withdrawn either way:
+				# they are here now, so it has done its job.
+				bought = storage.exchange.collect_reserved(inhabitant, good, want)["taken"]
+				storage.exchange.withdraw_resting_buy(good, inhabitant.id)
 				# M31: price ceiling rises with input_wait_timer, capped at their own gold –
 				# no crown fallback, too poor or too impatient means no raw material this trip.
-				var cap := _willingness_to_pay(inhabitant, storage.exchange, good, inhabitant.input_wait_timer)
-				bought = storage.exchange.consume(good, want, inhabitant, cap)
+				if want - bought > 0.0:
+					var cap := _willingness_to_pay(inhabitant, storage.exchange, good, inhabitant.input_wait_timer)
+					bought += storage.exchange.consume(good, want - bought, inhabitant, cap)
 			else:
 				bought = storage.withdraw_community(good, want)
 		if bought > 0.0:
@@ -1796,13 +1833,22 @@ func _buy_food_at(inh: InhabitantData, granary: BuildingInstance, want: float) -
 	if granary.exchange != null:
 		if not granary.exchange.goods.has(Goods.GoodType.FOOD):
 			return
-		# Food purchase at the market price; booking in buy_food/_charge_buyer.
-		var result := granary.exchange.buy_food(Goods.GoodType.FOOD, want, inh)
-		var taken: float = result["taken"]
+		# M36: collect whatever the standing bid already secured, then buy the rest over the
+		# counter. Both paths report the price actually paid, so last_food_unit_price stays
+		# honest – it is the anchor the whole buy side prices from (ReservationPricing).
+		var collected := granary.exchange.collect_reserved(inh, Goods.GoodType.FOOD, want)
+		granary.exchange.withdraw_resting_buy(Goods.GoodType.FOOD, inh.id)
+		var taken: float = collected["taken"]
+		var cost: float = collected["cost"]
+		if want - taken > 0.0:
+			# Food purchase at the market price; booking in buy_food/_charge_buyer.
+			var result := granary.exchange.buy_food(Goods.GoodType.FOOD, want - taken, inh)
+			taken += result["taken"]
+			cost += float(result["taken"]) * float(result["unit_price"])
 		if taken > 0.0:
-			inh.last_food_unit_price = result["unit_price"]
+			inh.last_food_unit_price = cost / taken
 			inh.add_to_inventory(Goods.GoodType.FOOD, taken)
-			_charge_greed_premium(inh, taken * result["unit_price"])
+			_charge_greed_premium(inh, cost)
 		elif DEBUG_STARVE:
 			print("[STARVE] #%d at market %d, but taken=0 (stock=%.1f, budget=%.1f) → empty/unaffordable" % [
 				inh.id, granary.id, granary.community_stock.get(Goods.GoodType.FOOD, 0.0), inh.gold])

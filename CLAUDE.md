@@ -59,7 +59,7 @@ tone from turning arbitrarily cruel.
 | `SimulationManager` | Master tick loop + inhabitant FSM; time/speed, hunger, farming, gathering — the big one |
 | `BuildingManager` | Building instances, profession↔building mapping, trade-building set, maintenance |
 | `EconomyManager` | Rolling production/consumption flow tracker; delegates profession choice to a swappable `ProfessionStrategy` (M35) |
-| `MarketManager` | Decentralized exchanges (+ `scripts/data/market_exchange.gd`), matching, pricing |
+| `MarketManager` | Decentralized exchanges (+ `scripts/data/market_exchange.gd`), matching, pricing — M36 (⚠ unverified) replaced consignment with a double-auction order book |
 | `SaveLoadManager` | Serialize/restore world, buildings, inhabitants, market, gold |
 | `RunRecorder` | Per-run KPI CSV + events JSONL under `user://runs` |
 | `GlobalInventory` | Aggregate community stock + UI change notifications |
@@ -77,6 +77,16 @@ seed set with `tools/bench.ps1`; results accumulate in `user://runs/bench.csv`. 
 (pull) and `is_good_scarce` (hold) read one signal and **must stay in the same strategy** — splitting
 them reintroduces the pull/hold disagreement M34 fixed. Details →
 **[`docs/GAME_DESIGN.md` §9](docs/GAME_DESIGN.md#9-persistence--telemetry)**.
+
+**Order book (`scripts/data/market_order.gd`, `scripts/economy/reservation_pricing.gd`, M36 —
+⚠ measured as a regression, not yet fixed; a rollback is still on the table).** Villagers post
+resting SELL/BUY orders priced from `MarketHistory.recent_deal_price` (a *market* anchor — pricing
+off an inhabitant's own last sale compounds into a runaway, see the milestone log). `_match` is a
+**priority ladder, not price priority**: two villagers trade first even when the Crown is cheaper,
+and only then does the Crown act as buyer/seller of last resort — otherwise its starting stock
+makes it the counterparty to literally everything. Judge changes on **population and deaths**, with
+`p2p_share` read alongside, never alone: it looks fine in a settlement too small to trade. Details →
+**[`docs/GAME_DESIGN.md` §11, M36](docs/GAME_DESIGN.md)**.
 
 **Evolutionary traits (M28):** every inhabitant spawns with six random `[0,1]` traits, each with
 exactly one benefit and one drawback — Speed (+move speed / +food need), Strength (+carry capacity

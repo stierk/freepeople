@@ -61,6 +61,28 @@ func record_bid(good: int, price: float) -> void:
 	_bids[good] = list
 
 
+## M36: mean price of the last `count` completed deals for this good — what the market is
+## actually paying right now, across ALL sellers. Returns 0.0 while nothing has traded yet.
+##
+## This is the anchor every villager prices from. It deliberately reads the shared chronicle
+## rather than an individual's own `last_sale_unit_price`: anchoring a seller on their OWN last
+## price while opening a fixed multiple above it is a feedback loop, and it wrecked the economy
+## — one inhabitant ratcheted their price up sale after sale until they held 58% of all gold in
+## the settlement and everyone else starved at 2 gold (measured, seed 42, day 90).
+func recent_deal_price(good: int, count: int) -> float:
+	var list: Array = _events.get(good, [])
+	var sum := 0.0
+	var n := 0
+	for i in range(list.size() - 1, -1, -1):
+		if list[i]["kind"] != Kind.DEAL:
+			continue
+		sum += list[i]["price"]
+		n += 1
+		if n >= count:
+			break
+	return (sum / n) if n > 0 else 0.0
+
+
 func events(good: int) -> Array:
 	return _events.get(good, [])
 

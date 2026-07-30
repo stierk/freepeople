@@ -38,6 +38,14 @@ var market_data: MarketData = null
 var trade_data: TradeData = null
 ## M20: order-book exchange of this storage/granary (populated for STORAGE_YARD/GRANARY).
 var exchange: MarketExchange = null
+## M36: goods already bought and paid for, waiting for their owner to come and collect them.
+## `inhabitant_id -> {good -> {"qty": float, "value": float}}` – `value` is the gold actually
+## paid, kept so the buyer's unit price survives until pickup (it feeds last_food_unit_price,
+## which is what the whole buy side prices from).
+##
+## Reserved goods stay physically in `community_stock` and only leave it on pickup, so they are
+## never counted in two places; MarketExchange.crown_remainder() and _sync() discount them.
+var reserved: Dictionary = {}
 ## M20: global economic policy – only populated on the Town Hall instance (TOWN_HALL).
 var policy: PolicyData = null
 

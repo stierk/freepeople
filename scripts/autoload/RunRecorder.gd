@@ -37,7 +37,15 @@ const FLUSH_INTERVAL := 5.0
 ## primitive, _cumulative_deaths, and the avg_hunger / inhabitants_gold definitions used by
 ## sample_metrics — recomputing those elsewhere would let the two definitions drift apart.
 const BENCH_PATH := "user://runs/bench.csv"
-const BENCH_HEADER := "strategy,seed,days,survived,population,deaths,avg_hunger,inhabitants_gold,crown_gold,prof_entropy"
+## M36: `p2p_share` appended at the END (Import-Csv reads by header, so older sweeps still parse).
+const BENCH_HEADER := "strategy,seed,days,survived,population,deaths,avg_hunger,inhabitants_gold,crown_gold,prof_entropy,p2p_share"
+
+## M36: who stood on the other side of a trade. The whole point of the order-book rewrite was
+## that inhabitants trade with EACH OTHER instead of everything routing through the crown, and
+## that claim was previously unmeasurable — record_trade only counted goods and quantity, so a
+## settlement where the crown was the counterparty to every single deal looked identical to one
+## with a working internal market.
+enum Party { VILLAGER, CROWN }
 
 var _metrics_path: String = ""
 var _events_path: String = ""
@@ -50,6 +58,12 @@ var _paths_printed: bool = false
 var _cumulative_deaths: int = 0
 ## good -> amount traded since the last metrics sample (reset afterward).
 var _trade_qty: Dictionary = {}
+## M36: volume by counterparty since the last metrics sample (reset afterward).
+var _trade_qty_villager: float = 0.0
+var _trade_qty_crown: float = 0.0
+## M36: the same, cumulative over the whole run – feeds the bench row's p2p_share.
+var _trade_total_villager: float = 0.0
+var _trade_total_crown: float = 0.0
 
 
 func _ready() -> void:
@@ -79,6 +93,10 @@ func start_new_run() -> void:
 	_events_buffer = PackedStringArray()
 	_cumulative_deaths = 0
 	_trade_qty = {}
+	_trade_qty_villager = 0.0
+	_trade_qty_crown = 0.0
+	_trade_total_villager = 0.0
+	_trade_total_crown = 0.0
 
 	# Create the CSV file with a header row …
 	var mf := FileAccess.open(_metrics_path, FileAccess.WRITE)
@@ -144,10 +162,25 @@ func record_death(id: int, profession: int, gold: float, state: int, missed_meal
 # ---------------------------------------------------------------------------
 ## Counts traded volume per good since the last sample (cheap accumulator, called from
 ## the exchanges' DEAL sites). Flows into the next metrics row and is then reset to zero.
-func record_trade(good: int, qty: float) -> void:
+## `party` (M36) is who the OTHER side was, split out so a run shows whether the settlement
+## traded internally or merely funnelled everything through the crown.
+func record_trade(good: int, qty: float, party: int) -> void:
 	if not RECORD_ENABLED or qty <= 0.0:
 		return
 	_trade_qty[good] = _trade_qty.get(good, 0.0) + qty
+	if party == Party.VILLAGER:
+		_trade_qty_villager += qty
+		_trade_total_villager += qty
+	else:
+		_trade_qty_crown += qty
+		_trade_total_crown += qty
+
+
+## Share of all traded volume that changed hands between two inhabitants rather than with the
+## crown. 0.0 = the crown was the counterparty to everything (the pre-M36 failure mode).
+func p2p_share() -> float:
+	var total := _trade_total_villager + _trade_total_crown
+	return (_trade_total_villager / total) if total > 0.0 else 0.0
 
 
 ## Samples a KPI snapshot and appends it as a CSV row. Called periodically from
@@ -220,8 +253,14 @@ func sample_metrics() -> void:
 	for g in Goods.GoodType.values():
 		row.append("1" if EconomyManager.is_good_scarce(g) else "0")
 
+	# M36: who traded with whom in this interval.
+	row.append("%.1f" % _trade_qty_villager)
+	row.append("%.1f" % _trade_qty_crown)
+
 	_metrics_buffer.append(",".join(row))
 	_trade_qty = {}  # trade volume per interval
+	_trade_qty_villager = 0.0
+	_trade_qty_crown = 0.0
 
 
 func _csv_header() -> String:
@@ -248,6 +287,8 @@ func _csv_header() -> String:
 		cols.append("appeal_" + InhabitantData.Profession.keys()[p])
 	for g in Goods.GoodType.values():
 		cols.append("scarce_" + Goods.GoodType.keys()[g])
+	cols.append("tradevol_villager")
+	cols.append("tradevol_crown")
 	return ",".join(cols)
 
 
@@ -309,6 +350,7 @@ func append_bench_row(strategy: String, seed_value: int, days: int, survived: bo
 		"%.1f" % gold_sum,
 		"%.1f" % GlobalInventory.gold,
 		"%.3f" % _profession_entropy(),
+		"%.3f" % p2p_share(),
 	]
 	_append_lines(BENCH_PATH, PackedStringArray([",".join(row)]))
 
