@@ -1,19 +1,19 @@
-# Freepeople — Game Design & Current State
+# Freisassen — Game Design & Current State
 
-This document is the detailed, **on-demand** reference for what *Freepeople* is and how it currently
+This document is the detailed, **on-demand** reference for what *Freisassen* is and how it currently
 works — it is **not** auto-loaded; open it when you need mechanics depth. For the always-in-context
 architecture map, conventions, and the canonical **Story & Setting**, see [CLAUDE.md](../CLAUDE.md)
 (auto-loaded every session). For a short pitch see the [README](../README.md).
 
 Values in this document are pulled from source. Where a constant is named, its file is given so
 the doc doubles as a balance reference. Engine: **Godot 4.6** (Mobile renderer, landscape),
-package `de.hirth.freepeople`, entry scene `scenes/main/Main.tscn`.
+package `de.hirth.freisassen`, entry scene `scenes/main/Main.tscn`.
 
 ---
 
 ## 1. Overview & win/lose
 
-Freepeople is a **self-organizing village economy simulation**. The player does **not** directly
+Freisassen is a **self-organizing village economy simulation**. The player does **not** directly
 command individual people. Instead, autonomous inhabitants (agents) each decide what to do: they
 pick a profession, build or reclaim a hut, gather resources, run production chains, sell their
 goods on a market, buy food, and — if they can't eat — starve and die.

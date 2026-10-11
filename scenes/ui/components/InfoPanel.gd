@@ -113,7 +113,7 @@ func _process(delta: float) -> void:
 		return
 	_dirty = false
 	_refresh_cooldown = REFRESH_INTERVAL
-	_refresh()
+	_refresh(true)
 
 
 func _on_backdrop_input(event: InputEvent) -> void:
@@ -123,19 +123,28 @@ func _on_backdrop_input(event: InputEvent) -> void:
 		hide_panel()
 
 
-func _refresh() -> void:
+## `preserve_scroll` keeps the current scroll offset – used by the throttled auto-refresh,
+## so reading the lower rows doesn't jump back to the top every 0.3 s. Opening the panel
+## for a new building/inhabitant refreshes without it and therefore starts at the top.
+func _refresh(preserve_scroll: bool = false) -> void:
+	var previous_scroll: int = scroll.scroll_vertical if preserve_scroll else 0
 	_clear_content()
 	if _building_id != -1:
 		_refresh_building()
 	elif _inhabitant_id != -1:
 		_refresh_inhabitant()
 	# The panel has a fixed size (right side, 40% wide, full height below the HUD); the
-	# scroll fills the rest below the header. After a rebuild only reset to the top.
-	call_deferred("_reset_scroll")
+	# scroll fills the rest below the header.
+	_apply_scroll(previous_scroll)
 
 
-func _reset_scroll() -> void:
-	scroll.scroll_vertical = 0
+func _apply_scroll(value: int) -> void:
+	# The freshly added rows only reach their final height once the container has re-sorted;
+	# until then the ScrollContainer would clamp the write against the old (zero) content
+	# height. Wait one frame, then restore.
+	await get_tree().process_frame
+	if is_instance_valid(scroll):
+		scroll.scroll_vertical = value
 
 
 func _refresh_building() -> void:
@@ -321,8 +330,10 @@ func _add_policy_editors(building: BuildingInstance) -> void:
 		_add_stepper("%s Subsidy" % Goods.DISPLAY_NAMES[good], policy.subsidy.get(good, 0.0),
 			_on_subsidy_changed.bind(building.id, good), -99.0)
 	_add_section("Welfare")
-	_add_stepper("Basic Income (Gold/day, negative = flat tax)", policy.basic_income,
-		_on_basic_income_changed.bind(building.id), -99.0)
+	# Short label so the row fits the narrow panel; the details live in the tooltip.
+	_add_stepper("Basic Income", policy.basic_income,
+		_on_basic_income_changed.bind(building.id), -99.0,
+		999.0, 0.5, "Gold per day for every Freisasse; negative = flat daily head tax.")
 
 
 func _on_subsidy_changed(value: float, building_id: int, good: int) -> void:
@@ -431,12 +442,15 @@ func _add_stat(name_text: String, value_text: String, value_color: Color = COLOR
 
 ## Slider row: description (expand) + [−] value [+]. Lands in the ActionBox.
 func _add_stepper(name_text: String, value: float, on_changed: Callable,
-		min_val: float = 0.0, max_val: float = 999.0, step: float = 0.5) -> void:
+		min_val: float = 0.0, max_val: float = 999.0, step: float = 0.5,
+		tooltip: String = "") -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 
 	var name_label := Label.new()
 	name_label.text = name_text
+	name_label.tooltip_text = tooltip
+	name_label.mouse_filter = Control.MOUSE_FILTER_STOP if tooltip != "" else Control.MOUSE_FILTER_IGNORE
 	name_label.size_flags_horizontal = SIZE_EXPAND_FILL
 	name_label.add_theme_color_override("font_color", COLOR_LABEL)
 	name_label.add_theme_font_size_override("font_size", FONT_BODY)

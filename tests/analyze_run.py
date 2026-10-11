@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyze a RunRecorder metrics CSV + events JSONL pair from a Freepeople turbo run.
+"""Analyze a RunRecorder metrics CSV + events JSONL pair from a Freisassen turbo run.
 
 Usage:
     python tests/analyze_run.py <path/to/run_..._metrics.csv> [path/to/run_..._events.jsonl]

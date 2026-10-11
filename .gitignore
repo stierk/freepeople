@@ -14,3 +14,12 @@ mono_crash.*.json
 # Android custom build template (regenerable via Project > Install Android Build
 # Template) and its Gradle build output — huge generated .aar/.so/.aab blobs.
 android/build/
+
+# Built release artifacts — regenerable via Project > Export, don't belong in git.
+deployments/*.apk
+deployments/*.apk.idsig
+deployments/*.aab
+
+# Signing keystores — never commit these, keep them outside the repo tree.
+*.keystore
+*.jks

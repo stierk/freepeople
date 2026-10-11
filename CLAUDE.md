@@ -1,7 +1,7 @@
 # CLAUDE.md
 
-*Freepeople* — a self-organizing village economy simulation in **Godot 4.6** (Mobile renderer,
-landscape; package `de.hirth.freepeople`). Autonomous inhabitants pick professions, build, run
+*Freisassen* — a self-organizing village economy simulation in **Godot 4.6** (Mobile renderer,
+landscape; package `de.hirth.freisassen`). Autonomous inhabitants pick professions, build, run
 production chains, trade on a decentralized market, eat, and can starve. Survive by keeping the
 population above zero. Entry scene: `scenes/main/Main.tscn`.
 
@@ -14,12 +14,13 @@ population above zero. Entry scene: `scenes/main/Main.tscn`.
 
 ## Story & Setting
 
-Freepeople takes place in a low-fantasy medieval frontier settlement called **Commonhurst**. This
+Freisassen takes place in a low-fantasy medieval frontier settlement called **Commonhurst**. This
 section is the canonical fiction — `story-keeper` judges every change against it; other docs and
 agent prompts should point here rather than restate it.
 
-**The player is the Crown.** Commonhurst's inhabitants are literally "free people": the Crown is
-constitutionally incapable of commanding any of them directly. This isn't backstory (no
+**The player is the Crown.** Commonhurst's inhabitants are literally Freisassen — free tenants
+bound to no lord: the Crown is constitutionally incapable of commanding any of them directly. This
+isn't backstory (no
 escape-from-tyranny narrative) — it's a structural rule that mirrors the simulation's actual
 design: the player never hires, fires, relocates, or routes an individual. The Crown governs only
 through uniform policy that applies to a good, a building type, or the settlement as a whole —
@@ -44,9 +45,9 @@ tone from turning arbitrarily cruel.
 |---|---|
 | **the Crown** | The player. |
 | **Crown treasury** | `GlobalInventory.gold` — the shared gold pool. |
-| **Freepeople** | The inhabitants (`InhabitantData`) — autonomous by constitutional design, not by circumstance. |
+| **Freisassen** | The inhabitants (`InhabitantData`) — autonomous by constitutional design, not by circumstance. Singular: **Freisasse**. |
 | **Subsidy / Tariff** | `PolicyData.subsidy[good]` — a positive per-unit top-up (subsidy) or negative deduction (tariff) on a good, paid to/from the Crown treasury. Global, applies to every exchange. |
-| **Basic income** | `PolicyData.basic_income` — a flat daily Crown payment to every Freeperson (settlement's safety net against a death spiral); a negative value instead levies a flat daily head tax on every Freeperson into the Crown treasury, uniform and not scaled to individual income. |
+| **Basic income** | `PolicyData.basic_income` — a flat daily Crown payment to every Freisasse (settlement's safety net against a death spiral); a negative value instead levies a flat daily head tax on every Freisasse into the Crown treasury, uniform and not scaled to individual income. |
 | **Local tax** | `TradeData.daily_tax` — a flat daily head tax, but only ever read from the **Treasury** (`BuildingManager.get_daily_tax`); the field also exists on Storage Yard/Granary but isn't read there, so it has no effect. Mechanically identical to a negative Basic income (same per-inhabitant, capped-by-own-gold deduction into the Crown treasury) — the difference is reach, not shape: this lever needs a player-built Treasury, negative Basic income doesn't. Still legitimate: uniform per building/settlement, not targeted at an individual. |
 | **Commonhurst** | The settlement itself. No further lore (region, calendar, neighbors) is established — keep it that way unless a specific feature needs it. |
 

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    M35: runs the Freepeople profession-choice benchmark over seeds x strategies.
+    M35: runs the Freisassen profession-choice benchmark over seeds x strategies.
 
 .DESCRIPTION
     Profession choice decides whether the food chain staffs itself or the roster freezes. Judging a
@@ -49,7 +49,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$UserData = Join-Path $env:APPDATA 'Godot\app_userdata\Freepeople'
+$UserData = Join-Path $env:APPDATA 'Godot\app_userdata\Freisassen'
 $RunsDir  = Join-Path $UserData 'runs'
 $BenchCsv = Join-Path $RunsDir 'bench.csv'
 $SavePath = Join-Path $UserData 'savegame.json'
