@@ -61,7 +61,7 @@ format Google Play requires:
 
 The preset is configured for:
 - Architecture: `arm64-v8a`
-- Package: `de.hirth.freisassen`
+- Package: `de.strierk.freisassen`
 - Min/target SDK: 24 / 36
 - Orientation: landscape (set in `project.godot`)
 - Touch emulation from mouse: enabled (set in `project.godot`)

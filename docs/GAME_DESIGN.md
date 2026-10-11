@@ -7,7 +7,7 @@ architecture map, conventions, and the canonical **Story & Setting**, see [CLAUD
 
 Values in this document are pulled from source. Where a constant is named, its file is given so
 the doc doubles as a balance reference. Engine: **Godot 4.6** (Mobile renderer, landscape),
-package `de.hirth.freisassen`, entry scene `scenes/main/Main.tscn`.
+package `de.strierk.freisassen`, entry scene `scenes/main/Main.tscn`.
 
 ---
 

@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Freisassen* — a self-organizing village economy simulation in **Godot 4.6** (Mobile renderer,
-landscape; package `de.hirth.freisassen`). Autonomous inhabitants pick professions, build, run
+landscape; package `de.strierk.freisassen`). Autonomous inhabitants pick professions, build, run
 production chains, trade on a decentralized market, eat, and can starve. Survive by keeping the
 population above zero. Entry scene: `scenes/main/Main.tscn`.
 
