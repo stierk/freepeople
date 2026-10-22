@@ -41,10 +41,10 @@ extends RefCounted
 const EPS := 0.0001
 ## Price concession of a resting order per sim second of waiting (balancing knob). Applies to
 ## both sides now: sellers come down by this much, buyers go up by it.
-const DRIFT_PER_SEC := 0.02
+var DRIFT_PER_SEC: float = Tuning.f("DRIFT_PER_SEC", 0.02)
 ## How many recent deals `market_anchor` averages over. Long enough that one outlier trade
 ## cannot move the settlement's price level, short enough to follow a real shift in scarcity.
-const ANCHOR_SAMPLE := 10
+var ANCHOR_SAMPLE: int = Tuning.i("ANCHOR_SAMPLE", 10)
 
 # Untyped (BuildingInstance), to avoid a class reference cycle.
 var owner = null
