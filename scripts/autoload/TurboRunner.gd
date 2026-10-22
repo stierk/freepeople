@@ -38,6 +38,15 @@ var _food_price := -1.0
 ## M35: the seed actually used, kept for the bench.csv row. -1 = no --turbo-seed given, i.e. the run
 ## is not reproducible and should not be compared against anything.
 var _seed_value := -1
+## Tuner: --turbo-passive makes the Crown inert (no basic income, subsidy, tax, buy/sell) so the
+## village is judged on its own economy.
+var _passive := false
+## Tuner: --turbo-result=<path> writes a JSON summary of the run for tools/tune.
+var _result_path := ""
+## Per-day count of distinct professions (NONE excluded) held, for the coverage objective.
+var _coverage_sum := 0
+var _coverage_days := 0
+var _last_sampled_day := 0
 
 
 func _ready() -> void:
@@ -50,6 +59,10 @@ func _ready() -> void:
 			_step_seconds = float(a.substr(13))
 		elif a == "--turbo-storage":
 			_place_storage = true
+		elif a == "--turbo-passive":
+			_passive = true
+		elif a.begins_with("--turbo-result="):
+			_result_path = a.substr(15)
 		elif a.begins_with("--turbo-food-price="):
 			_food_price = float(a.substr(19))
 		elif a.begins_with("--turbo-seed="):
@@ -106,6 +119,8 @@ func _wait_for_bootstrap() -> void:
 	SimulationManager.speed_mode = SimulationManager.SpeedMode.NORMAL
 	if _place_storage:
 		_place_storage_near_townhall()
+	if _passive:
+		_make_crown_passive()
 	if _food_price >= 0.0:
 		var th := BuildingManager.get_town_hall()
 		if th != null and th.trade_data != null:
@@ -115,6 +130,24 @@ func _wait_for_bootstrap() -> void:
 			push_error("[Turbo] --turbo-food-price: Town Hall has no TradeData")
 	print("[Turbo] bootstrap ready (pop=%d), stepping..." % GameState.population_count())
 	_run_loop()
+
+
+## Tuner: zeroes every Crown lever (World.gd hard-codes basic_income = 2.0 at game start). Crown
+## buy/sell is already disabled per good by TradeData._init; re-asserted here so a future default
+## change cannot silently re-enable it. Applied to storage buildings too (they copy the Town Hall).
+func _make_crown_passive() -> void:
+	var th := BuildingManager.get_town_hall()
+	th.policy.basic_income = 0.0
+	for g in th.policy.subsidy.keys():
+		th.policy.subsidy[g] = 0.0
+	for b: BuildingInstance in BuildingManager.buildings:
+		if b.trade_data == null:
+			continue
+		b.trade_data.daily_tax = 0.0
+		for g in b.trade_data.buy_disabled.keys():
+			b.trade_data.buy_disabled[g] = true
+			b.trade_data.sell_disabled[g] = true
+	print("[Turbo] crown passive: no basic income, subsidy, tax, buy or sell")
 
 
 ## Places a Storage Yard and a Granary on the nearest fully-grass, buildable footprints
@@ -199,7 +232,56 @@ func _run_loop() -> void:
 				_finish(true)
 				return
 			SimulationManager._process(_step_seconds)
+			_sample_coverage()
 		await get_tree().process_frame
+
+
+## Once per sim day: how many distinct professions (NONE excluded) have at least one holder.
+func _sample_coverage() -> void:
+	var day := SimulationManager.get_current_day()
+	if day == _last_sampled_day:
+		return
+	_last_sampled_day = day
+	_coverage_sum += _professions_held().size()
+	_coverage_days += 1
+
+
+func _professions_held() -> Dictionary:
+	var held := {}
+	for inh: InhabitantData in GameState.inhabitants:
+		if inh.profession != InhabitantData.Profession.NONE:
+			held[inh.profession] = int(held.get(inh.profession, 0)) + 1
+	return held
+
+
+## Tuner: JSON summary read by tools/tune. Everything it scores on is here, so parallel runs never
+## have to share bench.csv.
+func _write_result(survived: bool, day: int, pop: int) -> void:
+	if _result_path.is_empty():
+		return
+	var held := _professions_held()
+	var counts := {}
+	for p: int in held:
+		counts[InhabitantData.Profession.keys()[p]] = held[p]
+	var result := {
+		"survived": survived,
+		"seed": _seed_value,
+		"days": day,
+		"population": pop,
+		"deaths": RunRecorder.cumulative_deaths(),
+		"professions": counts,
+		"covered_final": counts.size(),
+		"covered_avg": float(_coverage_sum) / maxf(_coverage_days, 1),
+		"p2p_volume": RunRecorder.trade_total_villager(),
+		"p2p_share": RunRecorder.p2p_share(),
+		"crown_gold": GlobalInventory.gold,
+	}
+	var f := FileAccess.open(_result_path, FileAccess.WRITE)
+	if f == null:
+		push_error("[Turbo] cannot write --turbo-result=%s" % _result_path)
+		return
+	f.store_string(JSON.stringify(result))
+	f.close()
 
 
 func _finish(survived: bool) -> void:
@@ -209,6 +291,7 @@ func _finish(survived: bool) -> void:
 	# M35: machine-readable summary for tools/bench.ps1, appended across runs. The human-readable
 	# RESULT= line below and the exit codes stay exactly as they were — both are relied on.
 	RunRecorder.append_bench_row(EconomyManager.strategy_name(), _seed_value, day, survived)
+	_write_result(survived, day, pop)
 	if survived:
 		print("[Turbo] RESULT=SURVIVED day=%d population=%d crown_gold=%.1f" % [day, pop, GlobalInventory.gold])
 	else:

@@ -87,6 +87,10 @@ func start_new_run() -> void:
 	DirAccess.make_dir_recursive_absolute(RUNS_DIR)
 	# Strip colons from the ISO timestamp (Windows filenames).
 	var stamp := Time.get_datetime_string_from_system().replace(":", "-").replace("T", "_")
+	# Tuner: --turbo-tag=<id> keeps parallel headless runs from colliding on the 1-second timestamp.
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--turbo-tag="):
+			stamp += "_" + a.substr(12)
 	_metrics_path = "%s/run_%s_metrics.csv" % [RUNS_DIR, stamp]
 	_events_path = "%s/run_%s_events.jsonl" % [RUNS_DIR, stamp]
 	_metrics_buffer = PackedStringArray()
@@ -178,6 +182,15 @@ func record_trade(good: int, qty: float, party: int) -> void:
 
 ## Share of all traded volume that changed hands between two inhabitants rather than with the
 ## crown. 0.0 = the crown was the counterparty to everything (the pre-M36 failure mode).
+## Tuner: cumulative traded volume and deaths for the --turbo-result JSON.
+func trade_total_villager() -> float:
+	return _trade_total_villager
+
+
+func cumulative_deaths() -> int:
+	return _cumulative_deaths
+
+
 func p2p_share() -> float:
 	var total := _trade_total_villager + _trade_total_crown
 	return (_trade_total_villager / total) if total > 0.0 else 0.0
