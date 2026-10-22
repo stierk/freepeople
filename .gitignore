@@ -23,3 +23,8 @@ deployments/*.aab
 # Signing keystores — never commit these, keep them outside the repo tree.
 *.keystore
 *.jks
+
+# tuner output
+tools/tune/out/
+tools/tune/*.db
+tools/tune/__pycache__/

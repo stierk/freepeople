@@ -1,0 +1,11 @@
+{
+  "w_pop": 1.0,
+  "w_cov": 1.0,
+  "w_trade": 0.5,
+  "std_penalty": 0.25,
+  "pop_max": 32,
+  "pop_ref": 16,
+  "cov_max": 7,
+  "screen_days": 100,
+  "timeout_s": 2400
+}
