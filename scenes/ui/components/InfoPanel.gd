@@ -165,7 +165,10 @@ func _refresh_building() -> void:
 	if not building.community_stock.is_empty():
 		var shown := false
 		for good: int in building.community_stock.keys():
-			var amount: float = building.community_stock[good]
+			# Exchanges show only the crown's share; villager sell orders and paid-for
+			# reservations sit in the same stock but are not the crown's.
+			var amount: float = building.exchange.crown_remainder(good) if building.exchange != null \
+				else building.community_stock[good]
 			if amount > 0.0:
 				if not shown:
 					_add_section("Storage")
@@ -291,12 +294,34 @@ func _add_trade_row(building: BuildingInstance, good: int) -> void:
 		_on_sell_price_changed(v, building.id, good)
 		_update_now(now_label, building, good)
 
-	row.add_child(_make_stepper(td.buy_price.get(good, 0.0), buy_cb))
+	row.add_child(_make_crown_toggle(_make_stepper(td.buy_price.get(good, 0.0), buy_cb),
+		td.buy_disabled, good, now_label, building, "buying"))
 	row.add_child(now_label)
-	row.add_child(_make_stepper(td.sell_price.get(good, 0.0), sell_cb))
+	row.add_child(_make_crown_toggle(_make_stepper(td.sell_price.get(good, 0.0), sell_cb),
+		td.sell_disabled, good, now_label, building, "selling"))
 
 	stats_box.add_child(row)
 	_update_now(now_label, building, good)
+
+
+## Tapping a Buy/Sell price switches that side of the Crown's trade for this good on/off.
+## A switched-off price stays editable but is dimmed.
+func _make_crown_toggle(stepper: HBoxContainer, disabled: Dictionary, good: int,
+		now_label: Label, building: BuildingInstance, verb: String) -> HBoxContainer:
+	var value_label: Label = stepper.get_child(1)
+	value_label.mouse_filter = Control.MOUSE_FILTER_STOP
+	value_label.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var refresh := func() -> void:
+		var off: bool = disabled.get(good, false)
+		value_label.modulate.a = 0.3 if off else 1.0
+		value_label.tooltip_text = "Crown stopped %s – tap to resume" % verb if off 			else "Crown is %s – tap to stop" % verb
+	value_label.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			disabled[good] = not disabled.get(good, false)
+			refresh.call()
+			_update_now(now_label, building, good))
+	refresh.call()
+	return stepper
 
 
 func _update_now(now_label: Label, building: BuildingInstance, good: int) -> void:
@@ -383,7 +408,10 @@ func _refresh_inhabitant() -> void:
 	var home_exists := BuildingManager.get_building(inh.home_building_id) != null
 	_add_stat("State", InhabitantData.State.keys()[inh.state])
 	_add_stat("Resume", InhabitantData.State.keys()[inh.resume_state])
-	_add_stat("Home", "%d (exists: %s)" % [inh.home_building_id, "yes" if home_exists else "no"])
+	_add_stat("Workplace", "%d (exists: %s)" % [inh.home_building_id, "yes" if home_exists else "no"])
+	# M37: where they sleep and how much food waits there.
+	_add_stat("House", "none (sleeps rough)" if inh.house_id == -1 else "%d" % inh.house_id)
+	_add_stat("Pantry", "%.1f food" % inh.pantry_food)
 	_add_stat("Missed meals", "%d" % inh.missed_meals)
 
 	# M28: evolutionary traits – raw values [0,1], so spawns/balance stay traceable.

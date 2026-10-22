@@ -33,7 +33,6 @@ const BUILDING_DEF_PATHS := {
 	BuildingDef.BuildingType.STORAGE_YARD: "res://resources/data/building_defs/storage_yard.tres",
 	BuildingDef.BuildingType.GRANARY: "res://resources/data/building_defs/granary.tres",
 	BuildingDef.BuildingType.TREASURY: "res://resources/data/building_defs/treasury.tres",
-	BuildingDef.BuildingType.MARKET: "res://resources/data/building_defs/market.tres",
 	BuildingDef.BuildingType.WOODCUTTER_HUT: "res://resources/data/building_defs/woodcutter_hut.tres",
 	BuildingDef.BuildingType.SAWMILL_HUT: "res://resources/data/building_defs/sawmill_hut.tres",
 	BuildingDef.BuildingType.QUARRY_HUT: "res://resources/data/building_defs/quarry_hut.tres",
@@ -42,6 +41,7 @@ const BUILDING_DEF_PATHS := {
 	BuildingDef.BuildingType.WINDMILL: "res://resources/data/building_defs/windmill.tres",
 	BuildingDef.BuildingType.BAKERY: "res://resources/data/building_defs/bakery.tres",
 	BuildingDef.BuildingType.HUNTER_HUT: "res://resources/data/building_defs/hunter_hut.tres",  # M29
+	BuildingDef.BuildingType.HOUSE: "res://resources/data/building_defs/house.tres",  # M37
 }
 
 var buildings: Array[BuildingInstance] = []
@@ -64,9 +64,6 @@ func register_building(def: BuildingDef, cell: Vector2i) -> BuildingInstance:
 	instance.cell = cell
 	# M21: start the repair clock at creation (only relevant for occupied work huts).
 	instance.last_repaired_day = SimulationManager.get_current_day()
-	# M8: a market immediately gets its pricing data
-	if def.type == BuildingDef.BuildingType.MARKET:
-		instance.market_data = MarketData.new()
 	# M14/M17: storage yard/granary/treasury get editable trade data
 	if def.type in TRADE_BUILDING_TYPES:
 		instance.trade_data = TradeData.new()
@@ -190,11 +187,6 @@ func get_storage_for_good(good: int) -> BuildingInstance:
 	if good == Goods.GoodType.FOOD or good == Goods.GoodType.GRAIN or good == Goods.GoodType.FLOUR:
 		return get_granary()
 	return get_storage_yard()
-
-
-func get_market() -> BuildingInstance:
-	var list := get_buildings_by_type(BuildingDef.BuildingType.MARKET)
-	return list[0] if not list.is_empty() else null
 
 
 ## Returns a hut (finished or still under construction) with free capacity, so multiple

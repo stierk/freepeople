@@ -1,12 +1,17 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scenes/ui/HUD.gd" id="1"]
 [ext_resource type="Theme" path="res://resources/ui/ui_theme.tres" id="2"]
 
+[sub_resource type="Theme" id="Theme_hud_row"]
+default_font_size = 9
+
 [node name="HUD" type="Control"]
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 16.0
+offset_left = 10.0
+offset_right = -10.0
+offset_bottom = 21.0
 grow_horizontal = 2
 mouse_filter = 2
 theme = ExtResource("2")
@@ -17,6 +22,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = -4.0
+offset_right = 4.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -25,10 +32,13 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 6.0
+offset_right = -6.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_constants/separation = 4
+theme = SubResource("Theme_hud_row")
+theme_override_constants/separation = 2
 
 [node name="DayLabel" type="Label" parent="Row"]
 layout_mode = 2
@@ -64,21 +74,6 @@ text = "Stone: 0"
 layout_mode = 2
 vertical_alignment = 1
 text = "Food: 0"
-
-[node name="PolicyButton" type="Button" parent="Row"]
-layout_mode = 2
-text = "Policies"
-tooltip_text = "Open the Town Hall: set crown subsidies/tariffs and welfare."
-
-[node name="TreasuryButton" type="Button" parent="Row"]
-layout_mode = 2
-text = "Treasury"
-tooltip_text = "Open the Treasury: edit trade prices and the head tax."
-
-[node name="MarketButton" type="Button" parent="Row"]
-layout_mode = 2
-text = "Market"
-tooltip_text = "Open the Storage Yard market: trade prices and price charts."
 
 [node name="Spacer" type="Control" parent="Row"]
 layout_mode = 2

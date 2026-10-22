@@ -85,15 +85,19 @@ func crown_bid(good: int) -> float:
 	return maxf(0.0, f)
 
 
-## Whether the crown currently stands on each side of the book. Single place to switch off, so
-## docs/BACKLOG.md #4 ("price X = the crown does not trade this good") becomes a change to
-## these two functions instead of a special case at every call site.
+## Whether the crown currently stands on each side of the book — the single place the player's
+## buy/sell toggles (TradeData.buy_disabled / sell_disabled) are honoured. Villager-to-villager
+## trade is unaffected either way.
 func crown_sells(good: int) -> bool:
-	return crown_ask(good) >= 0.0
+	return not _crown_disabled("sell_disabled", good) and crown_ask(good) >= 0.0
 
 
 func crown_buys(good: int) -> bool:
-	return crown_bid(good) > 0.0
+	return not _crown_disabled("buy_disabled", good) and crown_bid(good) > 0.0
+
+
+func _crown_disabled(side: String, good: int) -> bool:
+	return owner != null and owner.trade_data != null and owner.trade_data.get(side).get(good, false)
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +137,13 @@ func best_bid(good: int) -> float:
 	return 0.0 if best == -INF else best
 
 
+## M37: how much of this good a buyer could get here right now – villager SELL orders plus the
+## crown's remainder, the latter only while the crown sells it.
+func buyable(good: int) -> float:
+	_sync(good)
+	return _sell_total(good) + (crown_remainder(good) if crown_sells(good) else 0.0)
+
+
 ## This good's crown remainder: community stock covered neither by a villager SELL order nor by
 ## a reservation already paid for. Public for telemetry (GlobalInventory.get_crown_total).
 func crown_remainder(good: int) -> float:
@@ -170,12 +181,14 @@ func offer(good: int, quantity: float, seller) -> float:
 ## For emergencies (a hungry, broke inhabitant needs cash right now for food) – a resting order
 ## would let them starve. Returns the accepted amount.
 func sell_to_crown_now(good: int, quantity: float, seller) -> float:
+	if not crown_buys(good):
+		return 0.0
 	var accepted := minf(quantity, owner.stock_space(good))
 	if accepted <= 0.0:
 		return 0.0
 	var price := crown_bid(good)
 	owner.community_stock[good] = owner.community_stock.get(good, 0.0) + accepted
-	history.record(good, MarketHistory.Kind.DEAL, price)
+	history.record(good, MarketHistory.Kind.DEAL, price, MarketHistory.Deal.CROWN_BUYS)
 	RunRecorder.record_trade(good, accepted, RunRecorder.Party.CROWN)
 	if seller != null:
 		EconomyManager.note_production(good, accepted)  # M34: see offer()
@@ -211,12 +224,20 @@ func _buy_now(good: int, want: float, payer, max_price: float) -> Dictionary:
 	_sync(good)
 	if payer == null or want <= EPS:
 		return {"taken": 0.0, "cost": 0.0}
-	var ceiling := _buyer_ceiling(good, payer)
-	ceiling = minf(ceiling, max_price)
-	# The chart's demand series is now a real bid, not gold/quantity as up to M35.
-	history.record(good, MarketHistory.Kind.DEMAND, ceiling)
+	var prices := _buyer_prices(good, payer)
+	var ceiling: float = minf(prices["ceiling"], max_price)
 	if ceiling <= 0.0:
+		# A bid of zero is not demand, it is inability to pay, and charting it drew a permanent
+		# band of points along the x axis (every broke inhabitant, every tick they stood at the
+		# counter). Whoever cannot bid does not appear in the demand series.
 		return {"taken": 0.0, "cost": 0.0}
+	# The chart gets the OPENING bid, not the ceiling below. The ceiling is a walk-away point —
+	# for food it is three times the going rate (HUNGER_CEILING) — so plotting it put the demand
+	# cloud permanently above the supply cloud and made it look as though buyers would outbid
+	# every seller. Supply plots asking prices, so demand has to plot bids for the two to be
+	# comparable at all. Throttled per inhabitant and market tick: this runs every frame while
+	# they stand at the counter.
+	history.record_demand(good, payer.id, minf(prices["open"], ceiling))
 	# Marketable: priced AT the walk-away point, so it crosses everything affordable right now.
 	var order := MarketOrder.make(MarketOrder.Side.BUY, good, MarketOrder.OwnerKind.VILLAGER,
 		payer.id, want, ceiling, ceiling)
@@ -239,20 +260,16 @@ func post_resting_buy(good: int, qty: float, buyer, hut) -> void:
 	if buyer == null or qty <= EPS or not goods.has(good):
 		return
 	withdraw_resting_buy(good, buyer.id)
-	var open: float
-	var ceiling: float
-	if good == Goods.GoodType.FOOD:
-		var anchor := market_anchor(good)
-		open = ReservationPricing.food_open(buyer, anchor)
-		ceiling = ReservationPricing.food_ceiling(buyer, anchor)
-	else:
-		open = ReservationPricing.input_open(buyer, hut)
-		ceiling = ReservationPricing.input_ceiling(buyer, hut)
-	if ceiling <= 0.0:
+	var prices := _buyer_prices(good, buyer, hut)
+	var open: float = prices["open"]
+	var ceiling: float = prices["ceiling"]
+	# Same rule as _buy_now: somebody who cannot bid anything has no demand to express. Posting a
+	# zero order would also sit at the bottom of the book forever without ever being fillable.
+	if ceiling <= 0.0 or open <= 0.0:
 		return
 	_post(MarketOrder.make(MarketOrder.Side.BUY, good, MarketOrder.OwnerKind.VILLAGER,
 		buyer.id, qty, open, ceiling))
-	history.record(good, MarketHistory.Kind.DEMAND, open)
+	history.record_demand(good, buyer.id, open)
 
 
 func withdraw_resting_buy(good: int, buyer_id: int) -> void:
@@ -288,15 +305,34 @@ func _release_reservation(inhabitant_id: int, good: int) -> void:
 		owner.reserved[inhabitant_id] = per_inh
 
 
-## What this buyer will pay at most, from their own knowledge only.
-func _buyer_ceiling(good: int, payer) -> float:
+## What this buyer opens at and where they stop, from their own knowledge only. Single source for
+## both numbers: the resting-bid path needs the pair, and the at-the-counter path needs the
+## ceiling to order at and the opening to report as demand. Computing them in two places is how
+## they drift apart.
+##
+## `hut` may be null — it is only consulted for the raw-material case, and is looked up from the
+## buyer when not supplied.
+func _buyer_prices(good: int, payer, hut = null) -> Dictionary:
+	var anchor := market_anchor(good)
 	if good == Goods.GoodType.FOOD:
-		return ReservationPricing.food_ceiling(payer, market_anchor(good))
-	var hut = BuildingManager.get_building(payer.home_building_id)
+		return {
+			"open": ReservationPricing.food_open(payer, anchor),
+			"ceiling": ReservationPricing.food_ceiling(payer, anchor),
+		}
+	if hut == null and payer != null:
+		hut = BuildingManager.get_building(payer.home_building_id)
 	if hut != null and hut.def != null and hut.def.input_good == good:
-		return ReservationPricing.input_ceiling(payer, hut)
+		return {
+			"open": ReservationPricing.input_open(payer, hut),
+			"ceiling": ReservationPricing.input_ceiling(payer, hut),
+		}
 	# Building material and repairs have no recipe behind them: the buyer's purse is the limit.
-	return payer.gold
+	# Unchanged from M36 — the opening price below is new, but it is reported, never charged.
+	var ceiling: float = payer.gold if payer != null else 0.0
+	return {
+		"open": ReservationPricing.material_open(payer, anchor, ceiling),
+		"ceiling": ceiling,
+	}
 
 
 # ---------------------------------------------------------------------------
@@ -427,12 +463,20 @@ func _settle(good: int, qty: float, price: float, buy_order, sell_order) -> void
 			_withdraw(buy_order)
 	# else: the crown bought – the goods stay put and simply become crown remainder.
 
-	history.record(good, MarketHistory.Kind.DEAL, price)
 	# Villager-to-villager only when BOTH sides are inhabitant orders — that is exactly the
-	# channel M36 exists to open, so it is the number the milestone is judged on.
-	var party := RunRecorder.Party.VILLAGER if (buy_order != null and sell_order != null) \
-		else RunRecorder.Party.CROWN
-	RunRecorder.record_trade(good, qty, party)
+	# channel M36 exists to open, so it is the number the milestone is judged on. The chart wants
+	# the direction too (which side the crown was on), the telemetry only whether it was involved.
+	var deal_party: int
+	if buy_order != null and sell_order != null:
+		deal_party = MarketHistory.Deal.VILLAGER
+	elif sell_order == null:
+		deal_party = MarketHistory.Deal.CROWN_SELLS
+	else:
+		deal_party = MarketHistory.Deal.CROWN_BUYS
+	history.record(good, MarketHistory.Kind.DEAL, price, deal_party)
+	RunRecorder.record_trade(good, qty,
+		RunRecorder.Party.VILLAGER if deal_party == MarketHistory.Deal.VILLAGER \
+		else RunRecorder.Party.CROWN)
 
 
 # ---------------------------------------------------------------------------
@@ -640,9 +684,11 @@ func tick() -> void:
 	var step := DRIFT_PER_SEC * MarketManager.MARKET_TICK_INTERVAL
 	for good in goods:
 		_sync(good)
-		# Advance the support-price step line even without orders, so the chart keeps running
-		# while the player adjusts the slider on empty storage.
+		# Advance both crown step lines even without orders, so the chart keeps running while the
+		# player adjusts a slider on empty storage. The two together are the band villager orders
+		# live in — with only the support price drawn you cannot tell a bargain from an overpayment.
 		history.record_bid(good, crown_bid(good))
+		history.record_ask(good, crown_ask(good))
 		for order in _sells(good):
 			order.drift(step, MarketManager.MARKET_TICK_INTERVAL)
 		_resort(good, MarketOrder.Side.SELL)

@@ -69,15 +69,15 @@ const CROP_HARVEST_YIELD := 1.0
 ## prey-free for HUNT_REPLENISH_DAYS days (last_hunted_day stamp on the tile). This
 ## makes multiple hunters in the same forest block each other.
 ## X = chance that a fresh (not recently hunted) forest cell contains prey.
-const HUNT_SUCCESS_CHANCE := 0.4
+const HUNT_SUCCESS_CHANCE := 0.1
 ## Y = days until a hunted forest cell can carry prey again.
 const HUNT_REPLENISH_DAYS := 4
 ## Hunting duration on-site – shorter than felling a tree (WOOD_CUT_TIME = half a day),
 ## so a successful hunt feels like "easy food".
 const HUNT_TIME := DAY_LENGTH_SECONDS * 0.33
-## Food per successful catch at best-case yield (frugality trait = 0.0). With X = 0.4 this
-## averages to ~2 FOOD per hunting attempt – a single hunter in a full forest feeds themself
-## plus a small surplus; with many hunters the mutual blocking pushes the yield down.
+## Food per successful catch at best-case yield (frugality trait = 0.0). With X = 0.1 this
+## averages to ~0.5 FOOD per hunting attempt – hunting is a marginal supplement to the farm
+## chain; with many hunters the mutual blocking pushes the yield down further.
 const FOOD_PER_CATCH := 5.0
 ## Guaranteed floor of every successful catch – NOT scaled by yield_multiplier(), so a hunter
 ## always brings back at least this much prey regardless of frugality. Only the remainder
@@ -103,21 +103,45 @@ const FOOD_CONSUMPTION_INTERVAL := DAY_LENGTH_SECONDS / 3.0
 ## (target selector in _handle_working), to start a buy-food trip. > 1 meal provides a
 ## safety cushion so they don't starve on the way to the granary.
 const FOOD_RESTOCK_THRESHOLD := 2.0
-const POP_GROWTH_FOOD_THRESHOLD := 1000.0
-## Food cost deducted from the granary for each population growth spawn.
-const POP_GROWTH_FOOD_COST := 100.0
-## M27: stretched from 45s (< 1 game day) to 5 game days – growth noticeably decoupled from
-## the food-check beat, so multiple inhabitants don't spawn in quick succession
-## before the economy (build/harvest capacity) has adapted to the previous growth.
-const POP_GROWTH_INTERVAL := DAY_LENGTH_SECONDS * 5.0
+## Population cap. M37: births are the only growth (the granary-stock growth of M8/M27 is gone).
 const POP_MAX := 32
-## M27: re-enabled (was permanently false, ever since the starting population never got
-## replenished – every death was final). With the starting stock, default policy, and the
-## profession/reclaim fixes of this balance pass (see World.gd/EconomyManager.gd/BuildingManager.gd,
-## all tagged "M27") the settlement now survives 1000 days even without growth; growth on a real
-## food surplus additionally offsets losses from economic dry spells, instead of
-## every death being permanent (see World.INITIAL_INHABITANT_COUNT).
-const POP_GROWTH_ENABLED := true
+
+# --- M37: staggered start, houses, sleep, births ---------------------------------------------
+## The Town Hall releases the starting colonists one by one instead of all at once, so the player
+## can react to each newcomer's job choice with prices before the next one arrives.
+const INITIAL_INHABITANT_COUNT := 10
+const INITIAL_SPAWN_INTERVAL := 30.0
+## Everyone sleeps once per day: at home if they have a house, otherwise rough on the spot
+## (InhabitantData.ROUGH_SLEEP_WORK_FACTOR until the next night at home).
+const REST_INTERVAL := DAY_LENGTH_SECONDS
+const SLEEP_SECONDS := 10.0
+
+# --- M38: going inside buildings -------------------------------------------------------------
+## Sim seconds a visitor spends "inside" a storage/market/hut after arriving, hidden by the view.
+const VISIT_DWELL_SECONDS := 0.4
+const VISIT_STATES := [
+	InhabitantData.State.DELIVERING,
+	InhabitantData.State.MARKET_TRIP,
+	InhabitantData.State.FETCHING_INPUT,
+	InhabitantData.State.FETCHING_MATERIALS,
+]
+## Meals' worth of food carried from the pantry on top of FOOD_RESTOCK_THRESHOLD – so a full
+## lunchbox lasts about a day before the next food run home.
+const LUNCHBOX_MEALS := 3.0
+## Housing decision: a free bed must cut the commute to this fraction to be worth moving...
+const HOUSE_MOVE_RATIO := 0.7
+## ...and building a new house must save at least this many cells of commute (Manhattan, see
+## _commute) – and the builder must hold this multiple of its material cost in gold.
+const HOUSE_MIN_SAVING := 8.0
+const HOUSE_BUILD_GOLD_FACTOR := 1.2
+## How far from the workplace a new house may go (cells, square scan).
+const HOUSE_SITE_RADIUS := 8
+## Births: two housemates asleep at home, both fed and solvent, each giving food and gold.
+const BIRTH_MIN_GOLD := 30.0
+const BIRTH_FOOD_EACH := 3.0
+const BIRTH_PURSE_FRACTION := 0.2
+const BIRTH_COOLDOWN_DAYS := 10
+const BIRTH_TRAIT_MUTATION := 0.1
 const TITHE_SALE_INTERVAL := 30.0
 ## M18: after this many consecutive missed meals (= 1 day "starved" + 1 more
 ## missed meal) an inhabitant starves to death.
@@ -150,10 +174,12 @@ const STALE_INVENTORY_SECONDS := DAY_LENGTH_SECONDS
 ## color tint (analogous to starving inhabitants).
 const REPAIR_INTERVAL_DAYS := 10
 const REPAIR_GRACE_DAYS := 10
+## A ruin nobody has started restoring is removed this many days after falling derelict.
+const RUIN_LIFETIME_DAYS := 10
 ## M22: repair material cost = this fraction of the build cost (per good, min 1 unit).
 const REPAIR_MATERIAL_FRACTION := 0.5
 ## Only these (occupied) work huts are subject to repair; infrastructure without
-## inhabitants (roads, storage, granary, treasury, town hall, market) is exempt.
+## inhabitants (roads, storage, granary, treasury, town hall) is exempt.
 const REPAIRABLE_BUILDING_TYPES := [
 	BuildingDef.BuildingType.WOODCUTTER_HUT,
 	BuildingDef.BuildingType.SAWMILL_HUT,
@@ -162,6 +188,7 @@ const REPAIRABLE_BUILDING_TYPES := [
 	BuildingDef.BuildingType.WINDMILL,
 	BuildingDef.BuildingType.BAKERY,
 	BuildingDef.BuildingType.HUNTER_HUT,  # M29
+	BuildingDef.BuildingType.HOUSE,  # M37: repaired by its richest occupant
 ]
 
 ## M23: scoring bonus (in "site score" units ≈ path cells) with which a fresh
@@ -258,7 +285,9 @@ var sim_time: float = 0.0
 var _resource_regen_accum: float = 0.0
 var _debug_log_accum: float = 0.0
 var _food_consumption_accum: float = 0.0
-var _pop_growth_accum: float = 0.0
+## M37: starting colonists released so far (saved; see INITIAL_SPAWN_INTERVAL).
+var initial_spawned: int = 0
+var _initial_spawn_accum: float = 0.0
 var _market_tick_accum: float = 0.0
 var _daily_tax_accum: float = 0.0
 var _crop_accum: float = 0.0
@@ -404,7 +433,7 @@ func _process(delta: float) -> void:
 		#      nobody starves mid-way through a long work cycle despite having money. Carried
 		#      goods stay in the inventory and are delivered after the purchase on the next WORKING.
 		#   2) Normal: only pause interruptible activities and resume the current state.
-		if inhabitant.state != InhabitantData.State.MARKET_TRIP:
+		if inhabitant.state != InhabitantData.State.MARKET_TRIP and inhabitant.state != InhabitantData.State.GOING_HOME:
 			var interruptible := _food_interruptible(inhabitant.state)
 			if _needs_emergency_food(inhabitant) or (interruptible and _needs_food_run(inhabitant)):
 				# Interruptible states can be resumed exactly. For aborted states
@@ -416,7 +445,7 @@ func _process(delta: float) -> void:
 					inhabitant.resume_state = InhabitantData.State.WORKING
 				else:
 					inhabitant.resume_state = InhabitantData.State.SEEKING_SITE
-				_start_market_trip(inhabitant)
+				_start_food_run(inhabitant)
 		# Stall guard: accumulate time in the build phase without progress. Reset to 0
 		# happens on real progress (material delivered / build timer running) in the
 		# handlers; if the inhabitant leaves the build phase (e.g. a food detour), it counts anew.
@@ -447,6 +476,10 @@ func _process(delta: float) -> void:
 		# Profession-switch check: personally paced (random × 10 days) instead of for
 		# all inhabitants simultaneously once a day. Spreads the load and gives each
 		# inhabitant their own "patience" before giving up an unprofitable profession.
+		# M37: sleep and the daily housing decision are acted on at the free decision point in
+		# _handle_working; here only their clocks run.
+		inhabitant.rest_timer += sim_delta
+		inhabitant.house_check_timer -= sim_delta
 		inhabitant.job_check_timer -= sim_delta
 		if inhabitant.job_check_timer <= 0.0:
 			inhabitant.job_check_timer = _job_check_interval(inhabitant)
@@ -471,10 +504,11 @@ func _process(delta: float) -> void:
 		_food_consumption_accum -= FOOD_CONSUMPTION_INTERVAL
 		_process_food_consumption()
 
-	_pop_growth_accum += sim_delta
-	if _pop_growth_accum >= POP_GROWTH_INTERVAL:
-		_pop_growth_accum -= POP_GROWTH_INTERVAL
-		_process_population_growth()
+	if initial_spawned < INITIAL_INHABITANT_COUNT:
+		_initial_spawn_accum += sim_delta
+		if _initial_spawn_accum >= INITIAL_SPAWN_INTERVAL:
+			_initial_spawn_accum -= INITIAL_SPAWN_INTERVAL
+			spawn_initial_inhabitant()
 
 	# M20: exchange tick (pricing, seller payment, crown export) replaces the
 	# old tithe/market logic.
@@ -627,6 +661,16 @@ func _process_food_consumption() -> void:
 func _feed_inhabitant(inh: InhabitantData) -> float:
 	# M28: speed drawback raises, frugality benefit lowers the personal need.
 	var need := FOOD_PER_INHABITANT_PER_TICK * inh.food_need_multiplier()
+	# M37: asleep at home → the meal comes out of the pantry first.
+	var from_pantry := 0.0
+	if inh.state == InhabitantData.State.SLEEPING and _at_home(inh):
+		from_pantry = minf(inh.pantry_food, need)
+		inh.pantry_food -= from_pantry
+		need -= from_pantry
+	return from_pantry + _feed_from_inventory(inh, need)
+
+
+func _feed_from_inventory(inh: InhabitantData, need: float) -> float:
 	var have: float = inh.inventory.get(Goods.GoodType.FOOD, 0.0)
 	var eaten := minf(have, need)
 	if eaten <= 0.0:
@@ -640,36 +684,20 @@ func _feed_inhabitant(inh: InhabitantData) -> float:
 
 
 # ---------------------------------------------------------------------------
-# M8: population growth
+# M37: staggered start – the Town Hall releases one colonist every INITIAL_SPAWN_INTERVAL
 # ---------------------------------------------------------------------------
-func _process_population_growth() -> void:
-	if not POP_GROWTH_ENABLED:
-		return
-	if GameState.population_count() >= POP_MAX:
-		return
-	var granary := BuildingManager.get_granary()
-	if granary == null:
-		return
-	var food: float = granary.community_stock.get(Goods.GoodType.FOOD, 0.0)
-	if food < POP_GROWTH_FOOD_THRESHOLD:
-		return
-
-	granary.community_stock[Goods.GoodType.FOOD] = food - POP_GROWTH_FOOD_COST
-	# M34: this withdrawal bypasses the exchange, so EconomyManager's flow tracker would never see
-	# it. Booked as measured (not installed) demand on purpose – growth is discretionary, and
-	# folding it into the analytic per-inhabitant appetite would roughly double it.
-	EconomyManager.note_consumption(Goods.GoodType.FOOD, POP_GROWTH_FOOD_COST)
-
+func spawn_initial_inhabitant() -> void:
 	var town_hall := BuildingManager.get_town_hall()
-	var spawn_cell: Vector2i
+	var spawn_cell: Vector2i = WorldGrid.MAP_SIZE / 2
 	if town_hall != null:
 		spawn_cell = town_hall.cell + Vector2i(1, town_hall.def.footprint_size.y)
-	else:
-		spawn_cell = WorldGrid.MAP_SIZE / 2
-
 	var inh := GameState.add_inhabitant(spawn_cell)
+	inh.world_pos += Vector2(randf_range(-5.0, 5.0), randf_range(-5.0, 5.0))
+	if inh.node_ref:
+		inh.node_ref.position = inh.world_pos
+	initial_spawned += 1
 	GlobalInventory.notify_population_changed(GameState.population_count())
-	print("[M8:Population] Inhabitant %d spawns. Total: %d" % [inh.id, GameState.population_count()])
+	print("[M37:Spawn] Colonist %d arrives (%d/%d)." % [inh.id, initial_spawned, INITIAL_INHABITANT_COUNT])
 
 
 # ---------------------------------------------------------------------------
@@ -747,7 +775,12 @@ func _process_basic_income() -> void:
 func _process_building_maintenance() -> void:
 	var day := get_current_day()
 	var to_demolish: Array[BuildingInstance] = []
+	var expired_ruins: Array[BuildingInstance] = []
 	for b in BuildingManager.buildings:
+		# Occupants on a ruin mean someone is restoring it – leave it standing.
+		if b.is_derelict and b.occupants.is_empty() and day - b.derelict_since_day >= RUIN_LIFETIME_DAYS:
+			expired_ruins.append(b)
+			continue
 		if not _is_repairable(b):
 			continue
 		var age := day - b.last_repaired_day
@@ -765,7 +798,19 @@ func _process_building_maintenance() -> void:
 			"type": BuildingDef.BuildingType.keys()[b.def.type],
 			"cell": [b.cell.x, b.cell.y],
 		})
-		_derelict_building(b)
+		# M37: a neglected house is torn down rather than left as a ruin nobody would reclaim.
+		if b.def.type == BuildingDef.BuildingType.HOUSE:
+			_demolish_building(b)
+		else:
+			_derelict_building(b)
+	for b in expired_ruins:
+		print("[Decay] Ruin %s (ID=%d) has crumbled away." % [b.def.display_name, b.id])
+		RunRecorder.record("ruin_removed", {
+			"building_id": b.id,
+			"type": BuildingDef.BuildingType.keys()[b.def.type],
+			"cell": [b.cell.x, b.cell.y],
+		})
+		_demolish_building(b)
 
 
 func _is_repairable(b: BuildingInstance) -> bool:
@@ -843,6 +888,7 @@ func _derelict_building(b: BuildingInstance) -> void:
 	_set_repair_state(b, false)
 	b.is_constructed = false
 	b.is_derelict = true
+	b.derelict_since_day = get_current_day()
 	b.output_stock.clear()  # discard running production
 	# Restoring costs the full build cost and the build time (like a new build on this spot).
 	b.pending_build_cost = b.def.build_cost.duplicate()
@@ -858,6 +904,12 @@ func _derelict_building(b: BuildingInstance) -> void:
 ## maybe another trade has become more lucrative in the meantime (profession = NONE →
 ## in _handle_seeking_site, assign_profession_for_new_inhabitant / pick_best_profession takes over).
 func _abort_stalled_build(inh: InhabitantData, hut: BuildingInstance) -> void:
+	# M37: a stuck HOUSE is simply given up – no ruin, and the builder keeps their trade.
+	if hut.def.type == BuildingDef.BuildingType.HOUSE:
+		print("[M37:House] House %d stalled → given up by inhabitant %d." % [hut.id, inh.id])
+		_demolish_building(hut)
+		inh.build_stall_timer = 0.0
+		return
 	print("[Build:Abort] %s (ID=%d) stalled for %.0fs without progress → ruin, inhabitant %d picks a new profession." % [
 		hut.def.display_name, hut.id, BUILD_STALL_TIMEOUT, inh.id])
 	RunRecorder.record("build_aborted", {
@@ -878,7 +930,16 @@ func _abort_stalled_build(inh: InhabitantData, hut: BuildingInstance) -> void:
 func _demolish_building(b: BuildingInstance) -> void:
 	for occ_id in b.occupants:
 		var inh := GameState.get_inhabitant(occ_id)
-		if inh != null:
+		if inh != null and b.def.type == BuildingDef.BuildingType.HOUSE:
+			# M37: losing a house leaves them homeless, not jobless.
+			# shortcut: the pantry is kept on the inhabitant and reappears in their next house; drop
+			# or carry it if lost-house food should matter for balance.
+			inh.house_id = -1
+			if inh.build_target_id == b.id:
+				inh.build_target_id = -1
+				if inh.state == InhabitantData.State.FETCHING_MATERIALS or inh.state == InhabitantData.State.BUILDING:
+					inh.state = InhabitantData.State.WORKING
+		elif inh != null:
 			inh.home_building_id = -1
 			inh.path = PackedVector2Array()
 			inh.path_index = 0
@@ -1004,7 +1065,7 @@ func try_switch_unprofitable(inh: InhabitantData) -> void:
 func _needs_food_run(inh: InhabitantData) -> bool:
 	if inh.inventory.get(Goods.GoodType.FOOD, 0.0) >= FOOD_RESTOCK_THRESHOLD:
 		return false
-	return _can_obtain_food(inh)
+	return _pantry_has_food(inh) or _can_obtain_food(inh)
 
 
 ## M22: emergency hunger – the carried stock barely covers the next meal. Then the
@@ -1013,7 +1074,7 @@ func _needs_food_run(inh: InhabitantData) -> bool:
 func _needs_emergency_food(inh: InhabitantData) -> bool:
 	if inh.inventory.get(Goods.GoodType.FOOD, 0.0) > FOOD_PER_INHABITANT_PER_TICK * 0.5:
 		return false
-	return _can_obtain_food(inh)
+	return _pantry_has_food(inh) or _can_obtain_food(inh)
 
 
 ## M23: true if the inhabitant would actually get food at the granary: there's a
@@ -1046,7 +1107,20 @@ func _food_interruptible(state: int) -> bool:
 		InhabitantData.State.FETCHING_MATERIALS,
 		InhabitantData.State.BUILDING,
 		InhabitantData.State.WORKING,
+		InhabitantData.State.SLEEPING,  # M37
 	]
+
+
+## M37: a food run goes home to the pantry when it holds at least a meal, otherwise to market.
+func _start_food_run(inh: InhabitantData) -> void:
+	if _pantry_has_food(inh):
+		_start_going_home(inh)
+	else:
+		_start_market_trip(inh)
+
+
+func _pantry_has_food(inh: InhabitantData) -> bool:
+	return inh.house_id != -1 and inh.pantry_food >= FOOD_PER_INHABITANT_PER_TICK * inh.food_need_multiplier()
 
 
 # ---------------------------------------------------------------------------
@@ -1111,6 +1185,17 @@ func _process_movement(inhabitant: InhabitantData, delta: float) -> void:
 # State dispatcher
 # ---------------------------------------------------------------------------
 func _process_inhabitant_state(inhabitant: InhabitantData, delta: float) -> void:
+	# M38: a visitor lingers inside the building for a moment before the handler acts.
+	if inhabitant.dwell_timer > 0.0:
+		inhabitant.dwell_timer -= delta
+		return
+	if _path_done(inhabitant):
+		if not inhabitant.dwell_paid and inhabitant.state in VISIT_STATES and _beside_building(inhabitant.cell):
+			inhabitant.dwell_paid = true
+			inhabitant.dwell_timer = VISIT_DWELL_SECONDS
+			return
+	else:
+		inhabitant.dwell_paid = false
 	match inhabitant.state:
 		InhabitantData.State.SEEKING_SITE:
 			_handle_seeking_site(inhabitant)
@@ -1138,6 +1223,10 @@ func _process_inhabitant_state(inhabitant: InhabitantData, delta: float) -> void
 			_handle_hunting(inhabitant, delta)
 		InhabitantData.State.FETCHING_INPUT:
 			_handle_fetching_input(inhabitant)
+		InhabitantData.State.GOING_HOME:
+			_handle_going_home(inhabitant)
+		InhabitantData.State.SLEEPING:
+			_handle_sleeping(inhabitant, delta)
 		_:
 			pass
 
@@ -1340,9 +1429,9 @@ func _handle_fetching_materials(inhabitant: InhabitantData) -> void:
 	if not inhabitant.path.is_empty() and inhabitant.path_index < inhabitant.path.size():
 		return
 
-	var hut := BuildingManager.get_building(inhabitant.home_building_id)
+	var hut := _build_site(inhabitant)
 	if hut == null:
-		inhabitant.state = InhabitantData.State.SEEKING_SITE
+		inhabitant.state = _lost_build_site_state(inhabitant)
 		return
 
 	# Stall guard: if the build has hung without progress since BUILD_STALL_TIMEOUT (no material
@@ -1400,6 +1489,7 @@ func _handle_fetching_materials(inhabitant: InhabitantData) -> void:
 		else:
 			hut.last_repaired_day = get_current_day()
 			_set_repair_state(hut, false)
+			inhabitant.build_target_id = -1
 			inhabitant.state = InhabitantData.State.WORKING
 		return
 
@@ -1414,16 +1504,16 @@ func _handle_fetching_materials(inhabitant: InhabitantData) -> void:
 
 
 func _handle_building(inhabitant: InhabitantData, delta: float) -> void:
-	var hut := BuildingManager.get_building(inhabitant.home_building_id)
+	var hut := _build_site(inhabitant)
 	if hut == null:
 		# Fix: build site disappeared → don't access null (crash/deadlock),
 		# re-enter as homeless instead.
 		if DEBUG_STARVE and inhabitant.missed_meals >= 1:
 			print("[STARVE] #%d BUILDING without a hut (home=%d) → SEEKING_SITE" % [inhabitant.id, inhabitant.home_building_id])
-		inhabitant.home_building_id = -1
-		inhabitant.state = InhabitantData.State.SEEKING_SITE
+		inhabitant.state = _lost_build_site_state(inhabitant)
 		return
 	if hut.is_constructed:
+		inhabitant.build_target_id = -1
 		inhabitant.state = InhabitantData.State.WORKING
 		return
 
@@ -1453,6 +1543,7 @@ func _handle_building(inhabitant: InhabitantData, delta: float) -> void:
 		if hut.def.type == BuildingDef.BuildingType.FARMER_HUT:
 			WorldGrid.designate_farm_field(hut.cell, hut.def.footprint_size, hut.id, FARM_FIELD_RADIUS)
 		print("[M7:Build] %s finished building (ID=%d)" % [hut.def.display_name, hut.id])
+		inhabitant.build_target_id = -1
 		inhabitant.state = InhabitantData.State.WORKING
 
 
@@ -1472,8 +1563,14 @@ func _handle_working(inhabitant: InhabitantData) -> void:
 	# M22: priority target selector. Priority 1 (food) is already handled globally in the
 	# _process loop (interrupts EVERY activity, not just WORKING). Priority 2 remains here:
 	#   – maintenance: due repair of one's own hut (fetch material from storage)
+	#   – M37: an interrupted house build/repair, sleep, the house's repair, the housing decision
 	#   – otherwise: normal profession work (further below)
+	if inhabitant.build_target_id != -1:
+		inhabitant.state = InhabitantData.State.FETCHING_MATERIALS
+		return
 	if _try_start_repair(inhabitant, hut):
+		return
+	if _try_house_errands(inhabitant, hut):
 		return
 
 	# M19: farmers don't work passively in the hut, but plant and harvest
@@ -2523,7 +2620,8 @@ func reset_state() -> void:
 	_resource_regen_accum = 0.0
 	_debug_log_accum = 0.0
 	_food_consumption_accum = 0.0
-	_pop_growth_accum = 0.0
+	initial_spawned = 0
+	_initial_spawn_accum = 0.0
 	_market_tick_accum = 0.0
 	_daily_tax_accum = 0.0
 	_crop_accum = 0.0
@@ -2541,3 +2639,321 @@ func _print_stock_summary() -> void:
 		sim_time, wood, planks, stone, food,
 		GlobalInventory.gold, GameState.population_count()
 	])
+
+
+# ---------------------------------------------------------------------------
+# M37: houses – build/repair target, sleep, pantry, housing decision, births
+# ---------------------------------------------------------------------------
+## What FETCHING_MATERIALS / BUILDING work on: their house while build_target_id is set,
+## otherwise the workplace (as before M37).
+func _build_site(inh: InhabitantData) -> BuildingInstance:
+	if inh.build_target_id != -1:
+		return BuildingManager.get_building(inh.build_target_id)
+	return BuildingManager.get_building(inh.home_building_id)
+
+
+## The build site vanished: a lost house only ends the errand, a lost workplace means job hunting.
+func _lost_build_site_state(inh: InhabitantData) -> InhabitantData.State:
+	if inh.build_target_id != -1:
+		inh.build_target_id = -1
+		return InhabitantData.State.WORKING
+	inh.home_building_id = -1
+	return InhabitantData.State.SEEKING_SITE
+
+
+func _own_house(inh: InhabitantData) -> BuildingInstance:
+	var house := BuildingManager.get_building(inh.house_id)
+	return house if house != null and house.is_constructed else null
+
+
+func _path_done(inh: InhabitantData) -> bool:
+	return inh.path.is_empty() or inh.path_index >= inh.path.size()
+
+
+func _beside_building(cell: Vector2i) -> bool:
+	for dir in WorldGrid.NEIGHBOR_OFFSETS_8:
+		var n: Vector2i = cell + dir
+		if WorldGrid.is_valid_cell(n) and WorldGrid.get_tile(n).building_id != -1:
+			return true
+	return false
+
+
+## M38: is this inhabitant inside a building right now? Read by the agent view to fade the node
+## out. Workers standing at their workplace, visitors in their dwell, sleepers at their own house.
+## Outdoor work (GATHERING/HUNTING/FARM_TENDING/BUILDING) is never indoors.
+func is_indoors(inh: InhabitantData) -> bool:
+	if inh.dwell_timer > 0.0:
+		return true
+	match inh.state:
+		InhabitantData.State.WORKING:
+			return _path_done(inh) and _beside_building(inh.cell)
+		InhabitantData.State.SLEEPING:
+			return _at_home(inh)
+	return false
+
+
+func _at_home(inh: InhabitantData) -> bool:
+	var house := _own_house(inh)
+	return house != null and absi(inh.cell.x - house.cell.x) + absi(inh.cell.y - house.cell.y) <= 1
+
+
+## Free decision point (WORKING): repair the house if they are its richest occupant, go to bed
+## when due, and once a day reconsider where they live. True if they were sent off.
+func _try_house_errands(inh: InhabitantData, work: BuildingInstance) -> bool:
+	var house := BuildingManager.get_building(inh.house_id)
+	if house != null and house.needs_repair and _is_richest_occupant(inh, house):
+		if _try_start_repair(inh, house):
+			inh.build_target_id = house.id
+			return true
+	if inh.rest_timer >= REST_INTERVAL:
+		if _own_house(inh) != null:
+			inh.resume_state = InhabitantData.State.WORKING
+			_start_going_home(inh)
+		else:
+			_fall_asleep(inh)
+		return true
+	if inh.house_check_timer <= 0.0:
+		inh.house_check_timer = DAY_LENGTH_SECONDS
+		return _decide_housing(inh, work)
+	return false
+
+
+func _is_richest_occupant(inh: InhabitantData, house: BuildingInstance) -> bool:
+	for id in house.occupants:
+		var other := GameState.get_inhabitant(id)
+		if other != null and other.gold > inh.gold:
+			return false
+	return true
+
+
+func _start_going_home(inh: InhabitantData) -> void:
+	var house := _own_house(inh)
+	if house == null:
+		_start_market_trip(inh)
+		return
+	inh.path = WorldGrid.find_path(inh.cell, house.cell)
+	inh.path_index = 0
+	inh.state = InhabitantData.State.GOING_HOME
+
+
+func _handle_going_home(inh: InhabitantData) -> void:
+	if not inh.path.is_empty() and inh.path_index < inh.path.size():
+		return
+	if not _at_home(inh):
+		# House gone (or unreachable) on the way: carry on with what they were doing.
+		_return_to_work(inh)
+		return
+	_stock_lunchbox(inh)
+	if inh.rest_timer >= REST_INTERVAL:
+		_fall_asleep(inh)
+	else:
+		_return_to_work(inh)
+
+
+## At home: carried food beyond the lunchbox goes into the pantry, a short lunchbox is topped up from it.
+func _stock_lunchbox(inh: InhabitantData) -> void:
+	var lunchbox := FOOD_RESTOCK_THRESHOLD + LUNCHBOX_MEALS * FOOD_PER_INHABITANT_PER_TICK * inh.food_need_multiplier()
+	var carried: float = inh.inventory.get(Goods.GoodType.FOOD, 0.0)
+	if carried > lunchbox:
+		inh.pantry_food += carried - lunchbox
+		inh.inventory[Goods.GoodType.FOOD] = lunchbox
+	else:
+		inh.pantry_food -= inh.add_to_inventory(Goods.GoodType.FOOD, minf(inh.pantry_food, lunchbox - carried))
+
+
+func _fall_asleep(inh: InhabitantData) -> void:
+	inh.path = PackedVector2Array()
+	inh.path_index = 0
+	inh.work_timer = SLEEP_SECONDS
+	inh.state = InhabitantData.State.SLEEPING
+	if _at_home(inh):
+		_try_birth(inh)
+
+
+func _handle_sleeping(inh: InhabitantData, delta: float) -> void:
+	inh.work_timer -= delta
+	if inh.work_timer > 0.0:
+		return
+	inh.rest_timer = 0.0
+	inh.rested = _at_home(inh)
+	if inh.rested:
+		_stock_lunchbox(inh)
+	inh.resume_state = InhabitantData.State.WORKING
+	_return_to_work(inh)
+
+
+## Same exit as a market trip: walk back to the workplace and resume there.
+func _return_to_work(inh: InhabitantData) -> void:
+	var hut := BuildingManager.get_building(inh.home_building_id)
+	if hut != null:
+		inh.path = WorldGrid.find_path(inh.cell, hut.cell)
+		inh.path_index = 0
+		inh.state = InhabitantData.State.RETURNING
+	else:
+		inh.state = inh.resume_state
+		inh.resume_state = InhabitantData.State.WORKING
+
+
+## Walking cost of living at `cell`: to work and back each day, plus the granary for food.
+## Manhattan on purpose – this runs over many candidate cells, A* would be the old SEEKING_SITE lag.
+func _commute(cell: Vector2i, work: BuildingInstance, granary: BuildingInstance) -> float:
+	var d := 2.0 * (absi(cell.x - work.cell.x) + absi(cell.y - work.cell.y))
+	if granary != null:
+		d += absi(cell.x - granary.cell.x) + absi(cell.y - granary.cell.y)
+	return d
+
+
+## Long-term housing decision (once per day): take a free bed that clearly shortens the walk,
+## else build a house near work if it pays off and they can afford it. True if they set off to build.
+func _decide_housing(inh: InhabitantData, work: BuildingInstance) -> bool:
+	if not work.is_constructed:
+		return false
+	var granary := BuildingManager.get_granary()
+	var house := _own_house(inh)
+	var current := _commute(house.cell, work, granary) if house != null else INF
+
+	var best_bed: BuildingInstance = null
+	var best_bed_commute := INF
+	for b: BuildingInstance in BuildingManager.get_buildings_by_type(BuildingDef.BuildingType.HOUSE):
+		if b == house or not b.is_constructed or b.occupants.size() >= b.def.max_capacity:
+			continue
+		var c := _commute(b.cell, work, granary)
+		if c < best_bed_commute:
+			best_bed = b
+			best_bed_commute = c
+	if best_bed != null and best_bed_commute < current * HOUSE_MOVE_RATIO:
+		_move_house(inh, best_bed)
+		return false
+
+	var site := _find_house_site(work, granary)
+	if site == Vector2i(-1, -1):
+		return false
+	if house != null and current - _commute(site, work, granary) < HOUSE_MIN_SAVING:
+		return false
+	if inh.gold < _house_cost_gold() * HOUSE_BUILD_GOLD_FACTOR or not _house_materials_buyable():
+		return false
+	_start_house_build(inh, site)
+	return true
+
+
+## Only start a house whose materials are all for sale now – otherwise the builder pays for half of
+## it and the build stalls (e.g. no Planks before a sawmill runs, or the Crown not selling them).
+func _house_materials_buyable() -> bool:
+	var def := BuildingManager.get_building_def(BuildingDef.BuildingType.HOUSE)
+	for good: int in def.build_cost:
+		var storage := BuildingManager.get_storage_for_good(good)
+		if storage == null or storage.exchange == null or storage.exchange.buyable(good) < def.build_cost[good]:
+			return false
+	return true
+
+
+## Best free grass cell around the workplace (no forest, field or path – a house must not eat the
+## resources or roads others depend on).
+func _find_house_site(work: BuildingInstance, granary: BuildingInstance) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	var best_commute := INF
+	for dy in range(-HOUSE_SITE_RADIUS, HOUSE_SITE_RADIUS + 1):
+		for dx in range(-HOUSE_SITE_RADIUS, HOUSE_SITE_RADIUS + 1):
+			var cell := work.cell + Vector2i(dx, dy)
+			if not WorldGrid.is_footprint_buildable(cell, Vector2i.ONE):
+				continue
+			var tile := WorldGrid.get_tile(cell)
+			if tile.terrain != TileRuntimeData.TerrainType.GRASS or tile.crop_field_owner != -1 \
+					or tile.path_type != TileRuntimeData.PathType.NONE:
+				continue
+			var c := _commute(cell, work, granary)
+			if c < best_commute:
+				best = cell
+				best_commute = c
+	return best
+
+
+## Current market value of a house's materials (what the builder will have to pay at storage).
+func _house_cost_gold() -> float:
+	var def := BuildingManager.get_building_def(BuildingDef.BuildingType.HOUSE)
+	var total := 0.0
+	for good: int in def.build_cost:
+		var storage := BuildingManager.get_storage_for_good(good)
+		var price: float = storage.exchange.get_price(good) if storage != null and storage.exchange != null \
+			else Goods.BASE_PRICES[good]
+		total += def.build_cost[good] * price
+	return total
+
+
+func _move_house(inh: InhabitantData, house: BuildingInstance) -> void:
+	var old := BuildingManager.get_building(inh.house_id)
+	if old != null:
+		old.occupants.erase(inh.id)
+	house.occupants.append(inh.id)
+	inh.house_id = house.id
+
+
+func _start_house_build(inh: InhabitantData, cell: Vector2i) -> void:
+	var def := BuildingManager.get_building_def(BuildingDef.BuildingType.HOUSE)
+	var house := BuildingManager.register_building(def, cell)
+	house.is_constructed = false
+	house.construction_timer = def.build_time_seconds
+	house.pending_build_cost = def.build_cost.duplicate()
+	WorldGrid.set_building_footprint_rect(cell, def.footprint_size, house.id, true)
+	_move_house(inh, house)
+	inh.build_target_id = house.id
+	inh.fetch_target_good = -1
+	inh.state = InhabitantData.State.FETCHING_MATERIALS
+	print("[M37:House] Inhabitant %d starts a house (ID=%d) at %s." % [inh.id, house.id, cell])
+
+
+## Two housemates asleep at home, both fed and solvent, off cooldown → a new adult Freisasse.
+func _try_birth(inh: InhabitantData) -> void:
+	if GameState.population_count() >= POP_MAX or not _can_parent(inh):
+		return
+	var house := _own_house(inh)
+	for id in house.occupants:
+		var partner := GameState.get_inhabitant(id)
+		if partner == null or partner == inh or partner.state != InhabitantData.State.SLEEPING:
+			continue
+		if not _at_home(partner) or not _can_parent(partner):
+			continue
+		_give_birth(inh, partner, house)
+		return
+
+
+func _can_parent(inh: InhabitantData) -> bool:
+	return inh.missed_meals == 0 and inh.gold >= BIRTH_MIN_GOLD \
+		and inh.pantry_food + inh.inventory.get(Goods.GoodType.FOOD, 0.0) >= BIRTH_FOOD_EACH \
+		and get_current_day() - inh.last_birth_day >= BIRTH_COOLDOWN_DAYS
+
+
+func _give_birth(a: InhabitantData, b: InhabitantData, house: BuildingInstance) -> void:
+	var purse := 0.0
+	for parent: InhabitantData in [a, b]:
+		var from_pantry := minf(parent.pantry_food, BIRTH_FOOD_EACH)
+		parent.pantry_food -= from_pantry
+		parent.inventory[Goods.GoodType.FOOD] = parent.inventory.get(Goods.GoodType.FOOD, 0.0) - (BIRTH_FOOD_EACH - from_pantry)
+		var share := parent.gold * BIRTH_PURSE_FRACTION
+		adjust_gold(parent, -share)
+		purse += share
+		parent.last_birth_day = get_current_day()
+	# The food is eaten up, not traded – book it as consumption like a meal.
+	EconomyManager.note_consumption(Goods.GoodType.FOOD, 2.0 * BIRTH_FOOD_EACH)
+
+	var child := GameState.add_inhabitant(house.cell)
+	child.gold = purse
+	# M28 traits are inherited: the parents' average plus a small mutation (GAME_DESIGN §12).
+	child.trait_speed = _inherit(a.trait_speed, b.trait_speed)
+	child.trait_strength = _inherit(a.trait_strength, b.trait_strength)
+	child.trait_frugality = _inherit(a.trait_frugality, b.trait_frugality)
+	child.trait_diligence = _inherit(a.trait_diligence, b.trait_diligence)
+	child.trait_resilience = _inherit(a.trait_resilience, b.trait_resilience)
+	child.margin = _inherit(a.margin, b.margin)  # greed
+	child.recompute_derived_stats()
+	child.last_birth_day = get_current_day()  # not a parent on day one
+	if house.occupants.size() < house.def.max_capacity:
+		_move_house(child, house)
+	GlobalInventory.notify_population_changed(GameState.population_count())
+	print("[M37:Birth] Inhabitant %d born to %d and %d in house %d. Total: %d" % [
+		child.id, a.id, b.id, house.id, GameState.population_count()])
+	RunRecorder.record("birth", {"id": child.id, "parents": [a.id, b.id], "house": house.id})
+
+
+func _inherit(x: float, y: float) -> float:
+	return clampf((x + y) * 0.5 + randf_range(-BIRTH_TRAIT_MUTATION, BIRTH_TRAIT_MUTATION), 0.0, 1.0)

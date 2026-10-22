@@ -26,14 +26,14 @@ var needs_repair: bool = false
 ## ruin (is_constructed == false, footprint occupied) and can be restored by an inhabitant
 ## in exchange for building material, instead of being demolished.
 var is_derelict: bool = false
+## Game day the hut fell derelict; an unclaimed ruin vanishes RUIN_LIFETIME_DAYS later.
+var derelict_since_day: int = 0
 ## Building materials still outstanding that an inhabitant must fetch from storage one at a time
 var pending_build_cost: Dictionary = {}
 ## Countdown to the next production cycle (M7: ticked by SimulationManager)
 var production_timer: float = 0.0
 ## Produced goods waiting for pickup by an inhabitant (M7)
 var output_stock: Dictionary = {}
-## Market pricing data (M8: only populated for BuildingType.MARKET)
-var market_data: MarketData = null
 ## Buy/sell prices and tax rate (M14/M17: populated for storage yard/granary/treasury)
 var trade_data: TradeData = null
 ## M20: order-book exchange of this storage/granary (populated for STORAGE_YARD/GRANARY).

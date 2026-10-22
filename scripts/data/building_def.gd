@@ -2,10 +2,11 @@ class_name BuildingDef
 extends Resource
 
 # M29: HUNTER_HUT appended at the end (enums are stored as int – only append).
+# M37: HOUSE appended. MARKET is no longer built (the Marketplace was removed) but keeps its slot.
 enum BuildingType {
 	STORAGE_YARD, GRANARY, TREASURY, MARKET,
 	WOODCUTTER_HUT, SAWMILL_HUT, QUARRY_HUT, FARMER_HUT, ROAD,
-	TOWN_HALL, WINDMILL, BAKERY, HUNTER_HUT
+	TOWN_HALL, WINDMILL, BAKERY, HUNTER_HUT, HOUSE
 }
 
 @export var type: BuildingType = BuildingType.STORAGE_YARD

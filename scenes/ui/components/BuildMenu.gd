@@ -1,7 +1,7 @@
 ## BuildMenu – M9
 ## Lists all player-placeable buildings (BuildingDef.is_player_placeable).
 ## A click activates placement mode; Main.gd queries active_def on tile tap.
-extends Control
+extends MarginContainer
 
 signal placement_selected(def: BuildingDef)
 

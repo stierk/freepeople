@@ -233,9 +233,8 @@ func demand_rate(good: int) -> float:
 func _installed_demand_rate(good: int) -> float:
 	var per_day := 0.0
 	if good == Goods.GoodType.FOOD:
-		# Eating. Deliberately excludes population growth (POP_GROWTH_FOOD_COST is discretionary and
-		# would be as large as eating itself); the growth withdrawal is booked as measured
-		# consumption instead, see SimulationManager._process_population_growth.
+		# Eating. Deliberately excludes births (M37: the parents' food is discretionary); it is booked
+		# as measured consumption instead, see SimulationManager._give_birth.
 		for inh: InhabitantData in GameState.inhabitants:
 			per_day += SimulationManager.FOOD_PER_INHABITANT_PER_TICK \
 				* inh.food_need_multiplier() * MEALS_PER_DAY

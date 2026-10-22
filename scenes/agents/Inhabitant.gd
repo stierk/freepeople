@@ -68,6 +68,7 @@ const COLOR_HUNGRY := Color(0.82, 0.51, 0.27, 1.0)
 const COLOR_STARVED := Color(0.35, 0.2, 0.12, 1.0)
 const COLOR_GRAVE := Color(0.45, 0.45, 0.45, 0.85)
 const COLOR_LERP_SPEED := 2.0
+const FADE_SECONDS := 0.2  # M38: fade in/out when entering/leaving a building
 
 ## Shared SpriteFrames cache per character sheet – each sheet is analyzed only once
 ## and the result is shared by all inhabitants who use it.
@@ -209,7 +210,11 @@ func _process(delta: float) -> void:
 		target = COLOR_STARVED
 	elif data.missed_meals >= 1:
 		target = COLOR_HUNGRY
+	# M38: fade out while inside a building (workplace, storage/market visit, own house).
+	var alpha := move_toward(modulate.a, 0.0 if SimulationManager.is_indoors(data) else 1.0, delta / FADE_SECONDS)
 	modulate = modulate.lerp(target, minf(1.0, delta * COLOR_LERP_SPEED))
+	modulate.a = alpha
+	visible = alpha > 0.0
 
 	if SimulationManager.DEBUG_PERF:
 		SimulationManager.report_inhabitant_process_usec(Time.get_ticks_usec() - _pt)

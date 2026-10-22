@@ -177,3 +177,19 @@ static func input_ceiling(buyer: InhabitantData, hut: BuildingInstance) -> float
 static func input_open(buyer: InhabitantData, hut: BuildingInstance) -> float:
 	var ceiling := input_ceiling(buyer, hut)
 	return minf(input_value(hut) * BUY_THRIFT, ceiling)
+
+
+# ---------------------------------------------------------------------------
+# Buy side — building material and repairs
+# ---------------------------------------------------------------------------
+
+## Opening bid for goods with no recipe and no hunger behind them: building material, repairs.
+## Same shape as `food_open` without the hunger term — below the going rate, greedier villagers
+## trying harder for a bargain, never above the ceiling the caller passes in.
+##
+## These purchases had no opening price at all before: the buyer's ceiling was simply their whole
+## purse (`MarketExchange._buyer_ceiling`), capped at the till by M31's `_willingness_to_pay`.
+## That is still what they PAY — this is only the number that expresses what they are asking for,
+## so the chart's demand series can show bids rather than walk-away points.
+static func material_open(buyer: InhabitantData, anchor: float, ceiling: float) -> float:
+	return minf(anchor * _greed_down(buyer) * BUY_THRIFT, ceiling)

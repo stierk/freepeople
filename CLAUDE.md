@@ -68,7 +68,8 @@ tone from turning arbitrarily cruel.
 
 Data model (`scripts/data/`): `goods.gd` (`GoodType`: WOOD, PLANKS, STONE, FOOD, GRAIN, FLOUR),
 `building_def.gd` (`BuildingType`) with `.tres` in `resources/data/building_defs/`,
-`inhabitant_data.gd` (profession, state machine, inventory cap 10 + food reserve 2, gold, hunger),
+`inhabitant_data.gd` (profession, state machine, inventory cap 10 + food reserve 2, gold, hunger;
+M37: `home_building_id` is the *workplace*, `house_id` the House they sleep in + `pantry_food`),
 `tile_data.gd` (terrain/path/crop enums). UI in `scenes/ui/`, agent visuals in `scenes/agents/`.
 
 **Profession strategies (`scripts/economy/`, M35):** profession choice is the most decisive mechanic

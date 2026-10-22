@@ -22,16 +22,16 @@ goods on a market, buy food, and — if they can't eat — starve and die.
   a growing, self-sustaining economy.
 - **Game over:** fires when the population reaches 0. `GameState.game_over(days_survived)` reports
   how many in-game days the settlement lasted.
-- **Population growth is enabled** (`SimulationManager.POP_GROWTH_ENABLED = true`, M27): once
-  community food stock exceeds `POP_GROWTH_FOOD_THRESHOLD`, a new colonist spawns every
-  `POP_GROWTH_INTERVAL`, up to `POP_MAX = 32`, costing `POP_GROWTH_FOOD_COST` food from the
-  granary. Every death is otherwise still permanent — growth is a slow, food-gated replacement
-  mechanism, not a guarantee.
-  > **Known mismatch (M34):** the intent was that this threshold sits *above* the Town Hall's own
-  > starting food stock, so growth requires a genuine produced surplus rather than coasting on the
-  > founding stockpile. It currently does not: `POP_GROWTH_FOOD_THRESHOLD = 1000.0` against a
-  > starting stock of `1150.0` (`World.gd`), so growth fires immediately on founding stock. Left as
-  > a tuning decision rather than silently changed.
+- **Start (M37):** the Town Hall releases the `INITIAL_INHABITANT_COUNT = 10` starting colonists
+  one every `INITIAL_SPAWN_INTERVAL = 30 s` (sim time) instead of all at once, so each newcomer's
+  job choice can be steered with prices before the next arrives.
+- **Population growth = births (M37)**, up to `POP_MAX = 32`. The M8/M27 growth from a full granary
+  is gone. Two housemates asleep at home, both fed (`missed_meals == 0`), each with
+  `BIRTH_MIN_GOLD = 30` gold and `BIRTH_FOOD_EACH = 3` food (pantry + carried), off a
+  `BIRTH_COOLDOWN_DAYS = 10` cooldown, produce a new **adult** Freisasse (no childhood). Each parent
+  gives 3 food (eaten up, booked as consumption) and `BIRTH_PURSE_FRACTION = 20%` of their gold as
+  the newborn's purse; traits are inherited (§12). The newborn takes a free bed in that house, or
+  starts homeless. Every death is otherwise permanent.
 
 ---
 
@@ -73,6 +73,29 @@ Per-inhabitant state:
   inhabitant on a long errand can still buy food and not starve with a full pack.
 - **Gold, hunger, missed meals**, plus market bookkeeping (personal margin, last sale/food price,
   break-even, unprofitable streak — see §6).
+- **Workplace vs. house (M37):** `home_building_id` is the **workplace** hut (historic name — until
+  M37 they also lived there). `house_id` is the House they sleep in (-1 = homeless), with a personal
+  `pantry_food` stock kept there (per inhabitant, so housemates never eat what someone else paid for).
+
+### Houses, sleep & the pantry (M37)
+
+- **Workplace first.** A newcomer finds/reclaims/builds a workplace exactly as before; housing only
+  starts once they work.
+- **Sleep:** every `REST_INTERVAL` (1 day) at the free decision point in `_handle_working` they walk
+  home (`GOING_HOME`) and sleep `SLEEP_SECONDS = 10` (`SLEEPING`). Homeless villagers sleep rough on
+  the spot and work at `ROUGH_SLEEP_WORK_FACTOR = 0.75` speed until their next night at home.
+- **Pantry:** at home, carried food above the *lunchbox* (`FOOD_RESTOCK_THRESHOLD` +
+  `LUNCHBOX_MEALS = 3` meals) goes into the pantry, a short lunchbox is topped up from it. A food run
+  goes home when the pantry holds a meal, to market otherwise (`_start_food_run`); meals while
+  asleep at home come from the pantry first. The emergency-food path is unchanged.
+- **Housing decision** (once per day, `_decide_housing`): commute = `2·dist(house, work) +
+  dist(house, granary)` (Manhattan). Move into a free bed (cap 4) that cuts it to
+  `HOUSE_MOVE_RATIO = 70%`; otherwise build a House on the best grass cell within
+  `HOUSE_SITE_RADIUS = 8` of work if homeless or it saves `HOUSE_MIN_SAVING = 8` cells, and they hold
+  `HOUSE_BUILD_GOLD_FACTOR = 1.2×` the materials' market value. Building/repairing a house reuses
+  `FETCHING_MATERIALS`/`BUILDING` via `build_target_id`.
+- **Upkeep:** a House is repairable like a work hut, but only its **richest occupant** does it; a
+  neglected (or stalled) House is demolished rather than left as a ruin.
 
 ### State machine (`SimulationManager._process_inhabitant_state`)
 
@@ -90,6 +113,14 @@ Per-inhabitant state:
 | `GATHERING` | Woodcutter/quarry worker mining a resource on-site | `_handle_gathering` |
 | `HAULING_HOME` | Carrying gathered resource back to the home hut | `_handle_hauling_home` |
 | `FETCHING_INPUT` | Producer (sawmill/windmill/bakery) buying its raw input at a storage | `_handle_fetching_input` |
+| `GOING_HOME` | M37: walking home to sleep and/or refill food from the pantry | `_handle_going_home` |
+| `SLEEPING` | M37: resting (at home, or rough when homeless); births happen here | `_handle_sleeping` |
+
+**Indoors (M38):** inhabitants fade out while inside a building — `WORKING` at the workplace, a
+`VISIT_DWELL_SECONDS = 0.4` dwell after arriving beside a building in `DELIVERING` / `MARKET_TRIP` /
+`FETCHING_INPUT` / `FETCHING_MATERIALS`, and `SLEEPING` at their own house
+(`SimulationManager.is_indoors`, read by `Inhabitant._process`). Outdoor states stay visible. Purely
+visual apart from the dwell pause; tapping the cell beside a building still selects the inhabitant.
 
 Movement (`_process_movement`) advances along the path at `move_speed_base` × terrain speed
 multiplier. Expensive idle searches (site/resource/field scans) are throttled by
@@ -182,7 +213,7 @@ Definitions live in `resources/data/building_defs/*.tres` (`BuildingDef`,
 | Storage Yard [0] | Community stock for Wood/Planks/Stone; hosts a market exchange | starter building, cap 2 |
 | Granary [1] | Community stock for Food/Grain/Flour; hosts a market exchange | cap 2 |
 | Treasury [2] | Trade building: editable buy/sell prices & head tax (the crown gold pool itself lives in `GlobalInventory.gold`, not here) | build cost 20 gold, cap 2 |
-| Marketplace [3] | Trading venue | build cost 10 gold, cap 2 |
+| *(Marketplace) [3]* | **Removed in M37** — it never did anything. Enum slot kept; old saves drop it on load | — |
 | Woodcutter's Hut [4] | Woodcutter workplace | carry 8, **build cost `{}` since M35** (see the milestone log) |
 | Sawmill [5] | Wood → Planks | carry 1 |
 | Quarry Hut [6] | Stone extraction | carry 4 |
@@ -192,6 +223,7 @@ Definitions live in `resources/data/building_defs/*.tres` (`BuildingDef`,
 | Windmill [10] | Grain → Flour | carry 1 |
 | Bakery [11] | Flour → Food | carry 1 |
 | Hunter's Tent [12] | Hunter workplace | carry 6, cap 1, not player-placeable |
+| House [13] | M37: where up to 4 Freisassen sleep and keep their pantry; built by villagers | 10 Wood + 5 Planks + 5 Stone, cap 4 |
 
 Key `BuildingDef` fields: `footprint_size`, `max_capacity`, `build_time_seconds`, `build_cost`
 (goods) / `build_cost_gold`, `storage_capacity`, `output_good`/`output_amount`/`output_interval`,
@@ -199,7 +231,7 @@ Key `BuildingDef` fields: `footprint_size`, `max_capacity`, `build_time_seconds`
 **trade buildings** (`BuildingManager.TRADE_BUILDING_TYPES`) with player-editable buy/sell prices
 and a tax rate (`TradeData`). Multi-cell footprints are supported (`WorldGrid` footprint helpers, M11).
 
-> Storage Yard, Granary, Marketplace and Treasury are **player-placed only** (`is_player_placeable
+> Storage Yard, Granary and Treasury are **player-placed only** (`is_player_placeable
 > = true`, built via the BuildMenu) — no autonomous code path ever constructs them. In an
 > unattended game the Town Hall is therefore not a transitional fallback but the **only**
 > storage/exchange/policy building that will ever exist for the whole run, which is why its
@@ -220,8 +252,8 @@ Work huts become due for repair every `REPAIR_INTERVAL_DAYS = 10` days. A hut re
 repair material from storage (cost = `REPAIR_MATERIAL_FRACTION = 0.5` of build cost, min 1 per good).
 If not repaired within `REPAIR_GRACE_DAYS = 10` (no material/nobody home) the hut falls derelict and
 disappears; during the grace period it gets a brown/grey tint. Only worker huts are repairable
-(`REPAIRABLE_BUILDING_TYPES`); infrastructure (roads, storages, granary, treasury, town hall, market)
-is exempt. Homeless inhabitants prefer to **reclaim** empty/derelict huts over building new ones
+(`REPAIRABLE_BUILDING_TYPES`, plus the House since M37); infrastructure (roads, storages, granary,
+treasury, town hall) is exempt. Homeless inhabitants prefer to **reclaim** empty/derelict huts over building new ones
 (reuse scoring `REUSE_BONUS_EMPTY`/`REUSE_BONUS_DERELICT`, M22/M23), which fights sprawl and revives
 abandoned huts.
 
@@ -448,10 +480,9 @@ Two operational notes the script encodes, both learned the hard way:
 
 ## 10. UI
 
-`scenes/ui/` — **HUD** (day, gold, population, stock, speed controls, restart, plus economy shortcut
-buttons — *Policies* → Town Hall, *Treasury*, and *Market* → Storage Yard — that open the relevant
-building's InfoPanel; previously these levers were only reachable by clicking the building in the
-world), **BuildMenu**
+`scenes/ui/` — **HUD** (day, gold, population, stock, speed controls, restart; the M26 *Policies* /
+*Treasury* / *Market* shortcut buttons were removed again to make room for a larger font — the
+levers are reached by clicking the building in the world), **BuildMenu**
 (placement), **InfoPanel** (click-to-inspect an inhabitant or building: profession, state, resume
 state, home, missed meals, carried inventory, storage/market/trade details), **MarketChartPanel /
 MarketChartPlot** (price history charts). Camera pan/zoom: `scenes/camera/CameraController.gd`.
@@ -518,7 +549,7 @@ not an exact history.
   `FOOD_PER_INHABITANT_PER_TICK` (1.0→0.7) so carried food lasts longer and buy-food trips are
   less frequent, reducing gold pressure without changing the meal cadence or starvation thresholds.
 - **M29** — Hunting: a new Hunter profession/Hunter's Tent (not player-placeable). The hunter walks
-  to a forest cell and rolls for prey (`HUNT_SUCCESS_CHANCE = 0.4`); the tree stays standing (no
+  to a forest cell and rolls for prey (`HUNT_SUCCESS_CHANCE = 0.1`); the tree stays standing (no
   `remove_tree`) — only the prey is temporarily gone, so a hunted cell is prey-free for
   `HUNT_REPLENISH_DAYS = 4` days, which makes multiple hunters sharing a forest naturally block
   each other. A successful catch always yields a guaranteed `HUNT_FOOD_BASE = 3.0` food floor, plus
@@ -828,12 +859,10 @@ Notes on interactions (deliberate cross-trait tension, not a bug):
   so only the smaller bonus portion is scaled down — the effective penalty on a catch tops out
   around -6%, not -15%. Wood/stone/grain gathering still scale the full harvested amount.
 
-**Future work (not yet implemented):** the fields are plain `[0,1]` floats specifically so a later
-reproduction mechanic can average two parents' traits (+ small mutation) into a new colonist's
-genes when population growth spawns someone, instead of the current uniform `randf()` roll. This
-would make traits a real evolutionary pressure (bad combinations die out via starvation; the
-survivors' genes propagate) rather than pure per-spawn noise. No parent-selection or crossover
-code exists yet — `_process_population_growth` still spawns with fresh random traits.
+**Inheritance (M37):** starting colonists still roll `randf()`, but a newborn's six traits are
+the parents' average ± `BIRTH_TRAIT_MUTATION = 0.1`, clamped to `[0,1]`
+(`SimulationManager._give_birth`). Traits are now a real evolutionary pressure: only fed, solvent
+housemates reproduce, so combinations that starve or stay poor die out.
 
 **Food-duration tuning:** `SimulationManager.FOOD_PER_INHABITANT_PER_TICK` was lowered from `1.0`
 to `0.7` (a flat ~30% cut, independent of traits) so a carried food stock lasts longer and

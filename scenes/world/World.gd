@@ -97,7 +97,6 @@ const FOREST_DENSE_NEIGHBORS := 5
 
 const BUILDING_BASE_SCENE := preload("res://scenes/buildings/BuildingBase.tscn")
 const INHABITANT_SCENE := preload("res://scenes/agents/Inhabitant.tscn")
-const INITIAL_INHABITANT_COUNT := 10
 
 @onready var terrain_layer: TileMapLayer = $TerrainLayer
 @onready var overlay_layer: TileMapLayer = $OverlayLayer
@@ -217,12 +216,12 @@ func _on_path_changed(cell: Vector2i) -> void:
 ## scarcity surface early, so the settlement's own food producers (hunter needs only forest, no
 ## chain) come online and — together with the M31 market tie-break (see MarketExchange._purchase)
 ## — actually earn, keeping money circulating. Wood/stone still cover the volatile build phase.
-## Planks are never needed (the sawmill is unreachable for inhabitants without a storage yard, see
-## BuildingManager.has_storage_yard) and therefore stay at 0.
+## Planks start at 100 so the crown has a plank stock before the first sawmill runs.
 func _place_start_buildings() -> void:
 	var center := WorldGrid.MAP_SIZE / 2
 	var town_hall := _place_building(BuildingDef.BuildingType.TOWN_HALL, center - Vector2i(1, 1))
 	town_hall.community_stock[Goods.GoodType.WOOD] = 300.0
+	town_hall.community_stock[Goods.GoodType.PLANKS] = 100.0
 	town_hall.community_stock[Goods.GoodType.STONE] = 200.0
 	town_hall.community_stock[Goods.GoodType.FOOD] = 1150.0
 
@@ -325,21 +324,14 @@ func _transfer_town_hall_stock(instance: BuildingInstance) -> void:
 				good, Goods.BASE_PRICES.get(good, 1.0))
 			instance.trade_data.sell_price[good] = town_hall.trade_data.sell_price.get(
 				good, Goods.BASE_PRICES.get(good, 1.0))
+			instance.trade_data.buy_disabled[good] = town_hall.trade_data.buy_disabled.get(good, false)
+			instance.trade_data.sell_disabled[good] = town_hall.trade_data.sell_disabled.get(good, false)
 
 
+## M37: only the first colonist arrives right away; SimulationManager releases the rest one by
+## one (INITIAL_SPAWN_INTERVAL).
 func _spawn_initial_inhabitants() -> void:
-	var town_hall := BuildingManager.get_town_hall()
-	var spawn_cell := town_hall.cell + Vector2i(1, town_hall.def.footprint_size.y)
-
-	# The signal is already connected; spawn directly at first without going through the
-	# signal, since add_inhabitant fires the signal and _on_inhabitant_added creates the node.
-	# But the world_pos jitter must be set afterward → briefly instantiate directly.
-	for i in range(INITIAL_INHABITANT_COUNT):
-		# add_inhabitant fires inhabitant_added → _on_inhabitant_added creates the node
-		var inh := GameState.add_inhabitant(spawn_cell)
-		inh.world_pos += Vector2(randf_range(-5.0, 5.0), randf_range(-5.0, 5.0))
-		if inh.node_ref:
-			inh.node_ref.position = inh.world_pos
+	SimulationManager.spawn_initial_inhabitant()
 
 
 ## M8: create the inhabitant node for an inhabitant spawned via signal (population growth)

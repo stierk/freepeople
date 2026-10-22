@@ -23,6 +23,10 @@ const DEFAULT_ASK_FACTOR := 1.0
 
 var buy_price: Dictionary = {}
 var sell_price: Dictionary = {}
+## Goods the Crown has stopped buying / selling here (good -> true). Separate from the price so
+## switching a side back on restores the price the player had set.
+var buy_disabled: Dictionary = {}
+var sell_disabled: Dictionary = {}
 var daily_tax: float = 0.0
 
 
@@ -30,3 +34,6 @@ func _init() -> void:
 	for good in Goods.GoodType.values():
 		buy_price[good] = Goods.BASE_PRICES[good] * DEFAULT_BID_FACTOR
 		sell_price[good] = Goods.BASE_PRICES[good] * DEFAULT_ASK_FACTOR
+		# The Crown starts out of the market; the player opts in per good and side.
+		buy_disabled[good] = true
+		sell_disabled[good] = true

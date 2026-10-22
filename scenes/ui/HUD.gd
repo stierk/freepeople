@@ -1,6 +1,5 @@
 ## HUD – M9/M18/M26
-## Top bar: day counter, gold, population, resources, economy shortcuts (Policies/Treasury/Market),
-## speed controls, restart.
+## Top bar: day counter, gold, population, resources, speed controls, restart.
 extends Control
 
 @onready var day_label: Label = $Row/DayLabel
@@ -19,16 +18,6 @@ extends Control
 @onready var restart_button: Button = $Row/RestartButton
 @onready var restart_confirm_dialog: ConfirmationDialog = $RestartConfirmDialog
 
-## M26: HUD quick-access buttons to the economy systems (Town Hall policy, Treasury, Market).
-@onready var policy_button: Button = $Row/PolicyButton
-@onready var treasury_button: Button = $Row/TreasuryButton
-@onready var market_button: Button = $Row/MarketButton
-
-## M26: the HUD doesn't know the InfoPanel (siblings). It reports the open request with the
-## resolved building; UIRoot opens the panel (same pattern as market_chart_requested).
-signal building_info_requested(building: BuildingInstance)
-
-
 func _ready() -> void:
 	GlobalInventory.gold_changed.connect(_on_gold_changed)
 	GlobalInventory.resources_changed.connect(_refresh_resources)
@@ -41,17 +30,6 @@ func _ready() -> void:
 
 	restart_button.pressed.connect(_on_restart_pressed)
 	restart_confirm_dialog.confirmed.connect(_on_restart_confirmed)
-
-	# M26: economy quick-access buttons. Policy lives at the Town Hall, tax/prices at the Treasury,
-	# the trade table + price chart at the Storage Yard.
-	# M34: get_storage_yard() falls back to the Town Hall, which used to have no TradeData — so
-	# before a Storage Yard was built this button opened a panel with no trade table at all. The
-	# Town Hall now has one, so it works from day one. Remaining gap: once a Storage Yard exists the
-	# fallback stops and this button shows wood/planks/stone only, i.e. food prices are then only
-	# reachable by clicking the Granary/Town Hall directly.
-	policy_button.pressed.connect(func() -> void: building_info_requested.emit(BuildingManager.get_town_hall()))
-	treasury_button.pressed.connect(func() -> void: building_info_requested.emit(BuildingManager.get_treasury()))
-	market_button.pressed.connect(func() -> void: building_info_requested.emit(BuildingManager.get_storage_yard()))
 
 	_on_gold_changed(GlobalInventory.gold)
 	_refresh_resources()
@@ -73,10 +51,10 @@ func _on_gold_changed(new_amount: float) -> void:
 
 
 func _refresh_resources() -> void:
-	wood_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.WOOD], int(GlobalInventory.get_community_total(Goods.GoodType.WOOD))]
-	planks_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.PLANKS], int(GlobalInventory.get_community_total(Goods.GoodType.PLANKS))]
-	stone_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.STONE], int(GlobalInventory.get_community_total(Goods.GoodType.STONE))]
-	food_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.FOOD], int(GlobalInventory.get_community_total(Goods.GoodType.FOOD))]
+	wood_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.WOOD], int(GlobalInventory.get_crown_total(Goods.GoodType.WOOD))]
+	planks_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.PLANKS], int(GlobalInventory.get_crown_total(Goods.GoodType.PLANKS))]
+	stone_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.STONE], int(GlobalInventory.get_crown_total(Goods.GoodType.STONE))]
+	food_label.text = "%s: %d" % [Goods.DISPLAY_NAMES[Goods.GoodType.FOOD], int(GlobalInventory.get_crown_total(Goods.GoodType.FOOD))]
 
 
 func _on_population_changed(new_count: int) -> void:

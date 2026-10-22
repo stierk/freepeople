@@ -46,8 +46,8 @@ func add_inhabitant(spawn_cell: Vector2i) -> InhabitantData:
 	inh.margin = randf()  # M20: personal price margin [0,1] (= greed trait, see M28)
 	inh.job_check_factor = randf()  # personal profession-switch check interval (× 10 days)
 	# M28: evolutionary traits – random at spawn. Each has a benefit and a drawback, see
-	# inhabitant_data.gd and docs/GAME_DESIGN.md §12. Reproduction (child inherits a mix of both
-	# parents) is planned as a later expansion; until then everyone spawns freshly randomized.
+	# inhabitant_data.gd and docs/GAME_DESIGN.md §12. M37: a newborn's traits are then overwritten
+	# with a mix of both parents' (SimulationManager._give_birth).
 	inh.trait_speed = randf()
 	inh.trait_strength = randf()
 	inh.trait_frugality = randf()
@@ -66,6 +66,10 @@ func remove_inhabitant(id: int) -> void:
 		if inhabitants[i].id == id:
 			var inh := inhabitants[i]
 			inhabitants.remove_at(i)
+			# M37: free their bed, or a full house would keep the dead's place forever.
+			var house := BuildingManager.get_building(inh.house_id)
+			if house != null:
+				house.occupants.erase(id)
 			if inh.node_ref != null:
 				inh.node_ref.mark_as_grave()
 			break

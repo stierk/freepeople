@@ -68,6 +68,7 @@ func save_game() -> void:
 		"flow": EconomyManager.serialize_flow(),  # M34
 		"next_building_id": BuildingManager.get_next_id(),
 		"next_inhabitant_id": GameState.get_next_inhabitant_id(),
+		"initial_spawned": SimulationManager.initial_spawned,  # M37
 		"tiles": _serialize_tiles(),
 		"buildings": _serialize_buildings(),
 		"inhabitants": _serialize_inhabitants(),
@@ -112,18 +113,15 @@ func _serialize_buildings() -> Array:
 			"last_repaired_day": b.last_repaired_day,
 			"needs_repair": b.needs_repair,
 			"is_derelict": b.is_derelict,
+			"derelict_since_day": b.derelict_since_day,
 			"pending_build_cost": _stringify_keys(b.pending_build_cost),
 		}
-		if b.market_data != null:
-			entry["market_data"] = {
-				"prices": _stringify_keys(b.market_data.prices),
-				"demand_counter": _stringify_keys(b.market_data.demand_counter),
-				"supply_counter": _stringify_keys(b.market_data.supply_counter),
-			}
 		if b.trade_data != null:
 			entry["trade_data"] = {
 				"buy_price": _stringify_keys(b.trade_data.buy_price),
 				"sell_price": _stringify_keys(b.trade_data.sell_price),
+				"buy_disabled": _stringify_keys(b.trade_data.buy_disabled),
+				"sell_disabled": _stringify_keys(b.trade_data.sell_disabled),
 				"daily_tax": b.trade_data.daily_tax,
 			}
 		# M36: goods an inhabitant has already PAID for but not yet picked up. Unlike open orders
@@ -176,6 +174,13 @@ func _serialize_inhabitants() -> Array:
 			"trait_frugality": inh.trait_frugality,
 			"trait_diligence": inh.trait_diligence,
 			"trait_resilience": inh.trait_resilience,
+			# M37: housing, sleep, births.
+			"house_id": inh.house_id,
+			"pantry_food": inh.pantry_food,
+			"rest_timer": inh.rest_timer,
+			"rested": inh.rested,
+			"last_birth_day": inh.last_birth_day,
+			"build_target_id": inh.build_target_id,
 		})
 	return result
 
@@ -211,6 +216,8 @@ func load_game() -> void:
 
 func _deserialize(data: Dictionary) -> void:
 	SimulationManager.sim_time = data.get("sim_time", 0.0)
+	# M37: older saves spawned the whole starting population at once.
+	SimulationManager.initial_spawned = int(data.get("initial_spawned", SimulationManager.INITIAL_INHABITANT_COUNT))
 	SimulationManager.speed_mode = data.get("speed_mode", SimulationManager.SpeedMode.NORMAL) as SimulationManager.SpeedMode
 
 	GlobalInventory.gold = data.get("gold", 100.0)
@@ -222,6 +229,12 @@ func _deserialize(data: Dictionary) -> void:
 
 	BuildingManager.buildings.clear()
 	for entry: Dictionary in data.get("buildings", []):
+		# M37: the Marketplace was removed (it never did anything). Drop it from old saves and
+		# free its 1x2 footprint, which the tiles above still claim.
+		if int(entry["type"]) == BuildingDef.BuildingType.MARKET:
+			var c: Array = entry["cell"]
+			WorldGrid.set_building_footprint_rect(Vector2i(c[0], c[1]), Vector2i(1, 2), -1, false)
+			continue
 		BuildingManager.buildings.append(_deserialize_building(entry))
 	BuildingManager.set_next_id(data.get("next_building_id", 0))
 
@@ -289,21 +302,16 @@ func _deserialize_building(entry: Dictionary) -> BuildingInstance:
 	b.last_repaired_day = int(entry.get("last_repaired_day", 0))
 	b.needs_repair = entry.get("needs_repair", false)
 	b.is_derelict = entry.get("is_derelict", false)
+	b.derelict_since_day = int(entry.get("derelict_since_day", 0))
 	b.pending_build_cost = _intify_keys(entry.get("pending_build_cost", {}))
-
-	if entry.has("market_data"):
-		var md_entry: Dictionary = entry["market_data"]
-		var md := MarketData.new()
-		md.prices = _intify_keys(md_entry.get("prices", {}))
-		md.demand_counter = _intify_keys(md_entry.get("demand_counter", {}))
-		md.supply_counter = _intify_keys(md_entry.get("supply_counter", {}))
-		b.market_data = md
 
 	if entry.has("trade_data"):
 		var td_entry: Dictionary = entry["trade_data"]
 		var td := TradeData.new()
 		td.buy_price = _intify_keys(td_entry.get("buy_price", {}))
 		td.sell_price = _intify_keys(td_entry.get("sell_price", {}))
+		td.buy_disabled = _intify_keys(td_entry.get("buy_disabled", {}))
+		td.sell_disabled = _intify_keys(td_entry.get("sell_disabled", {}))
 		td.daily_tax = td_entry.get("daily_tax", 0.0)
 		b.trade_data = td
 	elif b.def.type == BuildingDef.BuildingType.TOWN_HALL:
@@ -383,6 +391,13 @@ func _deserialize_inhabitant(entry: Dictionary) -> InhabitantData:
 	inh.trait_diligence = entry.get("trait_diligence", randf())
 	inh.trait_resilience = entry.get("trait_resilience", randf())
 	inh.recompute_derived_stats()
+	# M37: absent in older saves = homeless, rested, never a parent.
+	inh.house_id = int(entry.get("house_id", -1))
+	inh.pantry_food = entry.get("pantry_food", 0.0)
+	inh.rest_timer = entry.get("rest_timer", 0.0)
+	inh.rested = entry.get("rested", true)
+	inh.last_birth_day = int(entry.get("last_birth_day", -999))
+	inh.build_target_id = int(entry.get("build_target_id", -1))
 
 	# Movement/delivery state is not persisted (no path saved) –
 	# inhabitants are put into a safe state based on their home building

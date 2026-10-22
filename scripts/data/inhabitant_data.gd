@@ -17,6 +17,8 @@ enum State {
 	HAULING_HOME,        # carrying the harvested resource back to their own hut
 	FETCHING_INPUT,      # M21: sawmill/mill/bakery buys raw input physically at storage
 	HUNTING,             # M29: hunter walks to a forest cell and hunts prey there (probabilistic)
+	GOING_HOME,          # M37: walking to their house to sleep and/or refill food from the pantry
+	SLEEPING,            # M37: resting (at home, or rough on the spot when homeless)
 }
 
 ## M19: what a farmer does on their target field once they reach it.
@@ -69,6 +71,7 @@ const DILIGENCE_WORK_BONUS_MAX := 0.25      # +25% work speed at full diligence
 const DILIGENCE_HUNGER_PENALTY_MAX := 0.4   # +40% hunger increase at full diligence
 const RESILIENCE_HUNGER_TOLERANCE_MAX := 2.0  # + tolerated missed meals
 const RESILIENCE_WORK_PENALTY_MAX := 0.2    # -20% work speed at full resilience
+const ROUGH_SLEEP_WORK_FACTOR := 0.75       # M37: work speed after a night without a house
 
 
 ## Move speed multiplier from speed (benefit) and strength (drawback).
@@ -88,9 +91,10 @@ func yield_multiplier() -> float:
 
 
 ## Work-speed multiplier from diligence (benefit) and resilience (drawback), apply to
-## build/gather timers (bigger = finishes faster).
+## build/gather timers (bigger = finishes faster). M37: lower after a night sleeping rough.
 func work_speed_multiplier() -> float:
-	return (1.0 + trait_diligence * DILIGENCE_WORK_BONUS_MAX) * (1.0 - trait_resilience * RESILIENCE_WORK_PENALTY_MAX)
+	var rest_factor := 1.0 if rested else ROUGH_SLEEP_WORK_FACTOR
+	return (1.0 + trait_diligence * DILIGENCE_WORK_BONUS_MAX) * (1.0 - trait_resilience * RESILIENCE_WORK_PENALTY_MAX) * rest_factor
 
 
 ## Hunger-increase multiplier (diligence drawback) on a missed meal.
@@ -116,7 +120,23 @@ var state: State = State.SEEKING_SITE
 ## M22: state to return to after a hunger-driven buy-food trip, so an
 ## interrupted activity (build, fetching materials, work) resumes afterward.
 var resume_state: State = State.WORKING
+## The WORKPLACE hut (historic name: until M37 the workplace was also where they lived).
 var home_building_id: int = -1
+## M37: the house they sleep in and keep their pantry at (-1 = homeless, sleeps rough).
+var house_id: int = -1
+## M37: food stored at home. Kept per inhabitant (not on the house) so housemates never eat what
+## someone else paid for; only reachable while standing at the house.
+var pantry_food: float = 0.0
+## M37: sim seconds since they last slept.
+var rest_timer: float = 0.0
+## M37: false after a night sleeping rough – work speed drops until they sleep at home again.
+var rested: bool = true
+## M37: counts down to the next long-term housing decision (move house / build one).
+var house_check_timer: float = 0.0
+## M37: day of their last birth as a parent (cooldown).
+var last_birth_day: int = -999
+## M37: building being built/repaired when that is NOT the workplace (their house); -1 = workplace.
+var build_target_id: int = -1
 
 var cell: Vector2i = Vector2i.ZERO
 var world_pos: Vector2 = Vector2.ZERO
@@ -169,6 +189,11 @@ var input_wait_timer: float = 0.0
 ## SimulationManager._handle_gatherer_working) – otherwise a locally over-harvested hut can
 ## strand its worker producing nothing, forever.
 var resource_stall_retries: int = 0
+## M38: seconds left "inside" a building after arriving to trade/fetch (view hides the node
+## meanwhile; the dispatcher pauses the inhabitant). Not saved. `dwell_paid` = this arrival has
+## already had its dwell, so a handler that keeps waiting at the door doesn't re-trigger it.
+var dwell_timer: float = 0.0
+var dwell_paid: bool = false
 
 var target_site_cell: Vector2i = Vector2i(-1, -1)
 var fetch_target_good: int = -1
