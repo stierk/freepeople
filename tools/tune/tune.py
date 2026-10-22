@@ -109,7 +109,7 @@ def run_game(args, outdir, params, seed, days, tag):
     except subprocess.TimeoutExpired:
         print(f"WARNING: {tag} timed out after {args.timeout}s", file=sys.stderr)
     finally:
-        kill_tree(proc)
+        kill_tree(proc)  # also after normal exit: Godot console can leave children
         with _live_lock:
             _live.discard(proc)
     try:
@@ -162,7 +162,7 @@ def report(study, space, fixed, args, cfg, outdir):
     except Exception as e:
         print(f"(plots skipped: {e})")
     print(f"Best trial {best.number}: {best.value:.4f} -> {outdir / 'best_params.json'}")
-    if args.no_validate or STOP.is_set():
+    if args.no_validate or args.report_only or STOP.is_set():
         return
     vseeds = [int(x) for x in args.val_seeds.split(",")]
     base = {**fixed, **defaults_of(space)}
