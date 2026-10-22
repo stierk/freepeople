@@ -70,7 +70,12 @@ func _apply_tuning(def: BuildingDef, path: String) -> BuildingDef:
 		if Tuning.has_override(stem + ".cost." + good_name):
 			if out == null:
 				out = def.duplicate(true)
-			out.build_cost[Goods.GoodType[good_name]] = Tuning.f(stem + ".cost." + good_name, 0.0)
+			out.build_cost = out.build_cost.duplicate()  # duplicate(true) may share Dictionaries
+			var amount: float = Tuning.f(stem + ".cost." + good_name, 0.0)
+			if amount > 0.0:
+				out.build_cost[Goods.GoodType[good_name]] = amount
+			else:
+				out.build_cost.erase(Goods.GoodType[good_name])  # a zero entry would stall construction
 	if out != null:
 		print("[Tuning] applied building overrides to %s" % stem)
 	return out if out != null else def
