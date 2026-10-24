@@ -1,0 +1,16 @@
+{
+  "INVENTORY_CAPACITY": {"default": 10.0, "type": "float", "scale": "log", "min": 5.0, "max": 30.0},
+  "FOOD_RESERVE": {"default": 2.0, "type": "float", "scale": "linear", "min": 0.0, "max": 5.0},
+  "BASE_MOVE_SPEED": {"default": 24.0, "type": "float", "scale": "log", "min": 10.0, "max": 72.0},
+  "STRENGTH_CAPACITY_BONUS_MAX": {"default": 4.0, "type": "float", "scale": "linear", "min": 0.0, "max": 10.0},
+  "STRENGTH_SPEED_PENALTY_MAX": {"default": 0.2, "type": "float", "scale": "linear", "min": 0.0, "max": 0.8},
+  "SPEED_MOVE_BONUS_MAX": {"default": 0.25, "type": "float", "scale": "linear", "min": 0.0, "max": 1.0},
+  "SPEED_FOOD_PENALTY_MAX": {"default": 0.3, "type": "float", "scale": "linear", "min": 0.0, "max": 1.0},
+  "FRUGALITY_FOOD_BONUS_MAX": {"default": 0.25, "type": "float", "scale": "linear", "min": 0.0, "max": 0.8},
+  "FRUGALITY_YIELD_PENALTY_MAX": {"default": 0.15, "type": "float", "scale": "linear", "min": 0.0, "max": 0.8},
+  "DILIGENCE_WORK_BONUS_MAX": {"default": 0.25, "type": "float", "scale": "linear", "min": 0.0, "max": 1.0},
+  "DILIGENCE_HUNGER_PENALTY_MAX": {"default": 0.4, "type": "float", "scale": "linear", "min": 0.0, "max": 1.5},
+  "RESILIENCE_HUNGER_TOLERANCE_MAX": {"default": 2.0, "type": "float", "scale": "linear", "min": 0.0, "max": 6.0},
+  "RESILIENCE_WORK_PENALTY_MAX": {"default": 0.2, "type": "float", "scale": "linear", "min": 0.0, "max": 0.8},
+  "ROUGH_SLEEP_WORK_FACTOR": {"default": 0.75, "type": "float", "scale": "linear", "min": 0.3, "max": 1.0}
+}
