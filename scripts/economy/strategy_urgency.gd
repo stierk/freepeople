@@ -17,23 +17,24 @@ extends ProfessionStrategy
 ## (flow), and how many days of cover the stock represents (cover). See urgency_of().
 
 ## How many days of consumption the stock should cover before a good counts as comfortable.
-const TARGET_COVER_DAYS := 4.0
+var TARGET_COVER_DAYS: float = Tuning.f("TARGET_COVER_DAYS", 4.0)
 ## Weight of the flow term. Below 1.0 so a pure production deficit tops out short of 1.0 and an
 ## imminent stock-out (the cover term) can still outrank it.
-const FLOW_WEIGHT := 0.8
+var FLOW_WEIGHT: float = Tuning.f("FLOW_WEIGHT", 0.8)
 ## Absolute floor buffer for goods with intrinsic terminal demand, used only while measured and
 ## installed demand are still ~0 (world start). Deliberately NOT applied to pure intermediates:
 ## giving GRAIN/FLOUR a constant fallback target is exactly what pinned FARMER/MILLER at urgency
 ## 1.0 with an empty buffer nobody was waiting on.
-const TERMINAL_MIN_BUFFER := {
-	Goods.GoodType.WOOD: 10.0,
-	Goods.GoodType.STONE: 10.0,
-	Goods.GoodType.FOOD: 20.0,
+## Tuning keys: TERMINAL_MIN_BUFFER.WOOD / .STONE / .FOOD.
+var TERMINAL_MIN_BUFFER: Dictionary = {
+	Goods.GoodType.WOOD: Tuning.f("TERMINAL_MIN_BUFFER.WOOD", 10.0),
+	Goods.GoodType.STONE: Tuning.f("TERMINAL_MIN_BUFFER.STONE", 10.0),
+	Goods.GoodType.FOOD: Tuning.f("TERMINAL_MIN_BUFFER.FOOD", 20.0),
 }
 ## An input good inherits this share of its downstream good's urgency, so the food chain staffs
 ## itself back-to-front from real end-product scarcity while the direct producer of the scarce
 ## good always stays strictly more attractive.
-const CHAIN_PROPAGATION := 0.7
+var CHAIN_PROPAGATION: float = Tuning.f("CHAIN_PROPAGATION", 0.7)
 const DOWNSTREAM_GOOD := {
 	Goods.GoodType.GRAIN: Goods.GoodType.FLOUR,
 	Goods.GoodType.FLOUR: Goods.GoodType.FOOD,
@@ -43,13 +44,13 @@ const DOWNSTREAM_GOOD := {
 ## (a chain-propagated 0.7 × 0.8 = 0.56, then 0.39 two stages up) and "own flow deficit"
 ## (FLOW_WEIGHT = 0.8), so the guard protects a producer whose good is actually in deficit and
 ## never one whose good is only fashionable upstream.
-const SCARCE_URGENCY_THRESHOLD := 0.5
+var SCARCE_URGENCY_THRESHOLD: float = Tuning.f("SCARCE_URGENCY_THRESHOLD", 0.5)
 ## Over how many game days an unfinished building's outstanding material cost is spread when it is
 ## counted as demand. Longer = construction competes less with the food chain for labour. Tuned by
 ## sweep at --turbo-seed=42; see _installed_demand_rate.
-const BUILD_DEMAND_DAYS := 4.0
+var BUILD_DEMAND_DAYS: float = Tuning.f("BUILD_DEMAND_DAYS", 4.0)
 
-const RANDOM_TIEBREAK := 0.15
+var RANDOM_TIEBREAK: float = Tuning.f("RANDOM_TIEBREAK", 0.15)
 
 ## M31: profession scoring is now ADDITIVE (appeal = scarcity + profit + baseline) instead of the
 ## old multiplicative `urgency × price`. The old formula was a hard gate: a good sitting at/above
@@ -58,9 +59,9 @@ const RANDOM_TIEBREAK := 0.15
 ## colonists picked FARMER (the only scarce good, GRAIN). The additive form lets a raised Sell
 ## price contribute even when the good isn't scarce, and a small idle baseline plus a per-worker
 ## crowding penalty spreads surplus labor across professions instead of piling onto one.
-const PROFIT_WEIGHT := 0.5    # gentle: an above-base Sell price/subsidy lifts a profession, scarcity still leads
-const IDLE_BASELINE := 0.15   # floor every available profession keeps at 0 scarcity so surplus labor can spread
-const CROWD_WEIGHT := 0.5     # per-existing-worker penalty (~halves a profession's appeal every 2 workers)
+var PROFIT_WEIGHT: float = Tuning.f("PROFIT_WEIGHT", 0.5)    # gentle: an above-base Sell price/subsidy lifts a profession, scarcity still leads
+var IDLE_BASELINE: float = Tuning.f("IDLE_BASELINE", 0.15)   # floor every available profession keeps at 0 scarcity so surplus labor can spread
+var CROWD_WEIGHT: float = Tuning.f("CROWD_WEIGHT", 0.5)     # per-existing-worker penalty (~halves a profession's appeal every 2 workers)
 
 ## M29: the hunter competes with the baker for the same food urgency signal (both
 ## produce FOOD). This factor slightly dampens the hunter's weight so the reliable food chain
@@ -72,11 +73,11 @@ const CROWD_WEIGHT := 0.5     # per-existing-worker penalty (~halves a professio
 ## BELOW the 0.15 RANDOM_TIEBREAK — a lottery it was rigged to lose (measured: 0 hunters in 41
 ## days, appeal_HUNTER 0.080 vs 0.150 for everyone else). The intent was always "at equal food
 ## scarcity prefer the reliable chain", i.e. a scarcity tilt, not a floor penalty.
-const HUNT_FOOD_WEIGHT := 0.8
+var HUNT_FOOD_WEIGHT: float = Tuning.f("HUNT_FOOD_WEIGHT", 0.8)
 
 ## Meals per game day == DAY_LENGTH_SECONDS / FOOD_CONSUMPTION_INTERVAL. Day length itself lives on
 ## EconomyManager, which needs it for the flow ring too.
-const MEALS_PER_DAY := 3.0
+var MEALS_PER_DAY: float = Tuning.f("MEALS_PER_DAY", 3.0)
 ## Below this a demand rate counts as "no demand at all" rather than a division by ~zero.
 const FLOW_EPS := 0.01
 
