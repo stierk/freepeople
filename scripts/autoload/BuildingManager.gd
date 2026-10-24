@@ -52,8 +52,33 @@ var _def_cache: Dictionary = {}
 
 func get_building_def(type: BuildingDef.BuildingType) -> BuildingDef:
 	if not _def_cache.has(type):
-		_def_cache[type] = load(BUILDING_DEF_PATHS[type])
+		_def_cache[type] = _apply_tuning(load(BUILDING_DEF_PATHS[type]), BUILDING_DEF_PATHS[type])
 	return _def_cache[type]
+
+
+## Tuner overrides (keys "<file stem>.<field>" and "<file stem>.cost.<GOOD>"). Works on a duplicate so the
+## shared on-disk Resource is never mutated; without any matching override the original is returned.
+func _apply_tuning(def: BuildingDef, path: String) -> BuildingDef:
+	var stem: String = path.get_file().get_basename()
+	var out: BuildingDef = null
+	for field in ["output_interval", "output_amount", "input_amount", "carry_capacity", "build_time_seconds"]:
+		if Tuning.has_override(stem + "." + field):
+			if out == null:
+				out = def.duplicate(true)
+			out.set(field, Tuning.f(stem + "." + field, def.get(field)))
+	for good_name in Goods.GoodType.keys():
+		if Tuning.has_override(stem + ".cost." + good_name):
+			if out == null:
+				out = def.duplicate(true)
+			out.build_cost = out.build_cost.duplicate()  # duplicate(true) may share Dictionaries
+			var amount: float = Tuning.f(stem + ".cost." + good_name, 0.0)
+			if amount > 0.0:
+				out.build_cost[Goods.GoodType[good_name]] = amount
+			else:
+				out.build_cost.erase(Goods.GoodType[good_name])  # a zero entry would stall construction
+	if out != null:
+		print("[Tuning] applied building overrides to %s" % stem)
+	return out if out != null else def
 
 
 func register_building(def: BuildingDef, cell: Vector2i) -> BuildingInstance:

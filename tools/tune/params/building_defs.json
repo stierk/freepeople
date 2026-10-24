@@ -1,0 +1,248 @@
+{
+ "woodcutter_hut.output_interval": {
+  "default": 12.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.5
+ },
+ "woodcutter_hut.output_amount": {
+  "default": 1.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.1
+ },
+ "woodcutter_hut.carry_capacity": {
+  "default": 8.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "woodcutter_hut.build_time_seconds": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "sawmill_hut.output_interval": {
+  "default": 12.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.5
+ },
+ "sawmill_hut.output_amount": {
+  "default": 1.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.1
+ },
+ "sawmill_hut.input_amount": {
+  "default": 1.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.1
+ },
+ "sawmill_hut.carry_capacity": {
+  "default": 1.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "sawmill_hut.build_time_seconds": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "sawmill_hut.cost.WOOD": {
+  "default": 30.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "sawmill_hut.cost.STONE": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "quarry_hut.output_interval": {
+  "default": 12.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.5
+ },
+ "quarry_hut.output_amount": {
+  "default": 1.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.1
+ },
+ "quarry_hut.carry_capacity": {
+  "default": 4.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "quarry_hut.build_time_seconds": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "quarry_hut.cost.WOOD": {
+  "default": 20.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "farmer_hut.carry_capacity": {
+  "default": 3.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "farmer_hut.build_time_seconds": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "farmer_hut.cost.WOOD": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "farmer_hut.cost.STONE": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "windmill.output_interval": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.5
+ },
+ "windmill.output_amount": {
+  "default": 1.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.1
+ },
+ "windmill.input_amount": {
+  "default": 1.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.1
+ },
+ "windmill.carry_capacity": {
+  "default": 5.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "windmill.build_time_seconds": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "windmill.cost.WOOD": {
+  "default": 20.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "windmill.cost.STONE": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "bakery.output_interval": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.5
+ },
+ "bakery.output_amount": {
+  "default": 1.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.1
+ },
+ "bakery.input_amount": {
+  "default": 1.0,
+  "type": "float",
+  "scale": "log",
+  "min": 0.1
+ },
+ "bakery.carry_capacity": {
+  "default": 5.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "bakery.build_time_seconds": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "bakery.cost.WOOD": {
+  "default": 20.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "bakery.cost.STONE": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "hunter_hut.carry_capacity": {
+  "default": 6.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "hunter_hut.build_time_seconds": {
+  "default": 8.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "hunter_hut.cost.WOOD": {
+  "default": 15.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "house.build_time_seconds": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "house.cost.WOOD": {
+  "default": 10.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "house.cost.PLANKS": {
+  "default": 5.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ },
+ "house.cost.STONE": {
+  "default": 5.0,
+  "type": "float",
+  "scale": "log",
+  "min": 1
+ }
+}
