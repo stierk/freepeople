@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """Hyperparameter tuner for Freisassen: Optuna TPE over headless Godot turbo runs. See README.md."""
-import argparse, csv, json, math, os, statistics, subprocess, sys, threading
+import argparse, csv, json, math, os, statistics, subprocess, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -184,6 +184,7 @@ def main(argv=None):
     ap.add_argument("--storage", default=f"sqlite:///{(HERE / 'study.db').as_posix()}")
     ap.add_argument("--trials", type=int, default=30, help="new trials in this invocation")
     ap.add_argument("--jobs", type=int, default=3)
+    ap.add_argument("--hours", type=float, default=0, help="stop starting new trials after this many hours (0 = no limit)")
     ap.add_argument("--seeds", default="42,7,123", help="comma list, or an integer N = first N of 42,7,123,999,2024")
     ap.add_argument("--days", type=int, default=300)
     ap.add_argument("--val-seeds", default="1001,1002,1003")
@@ -233,11 +234,12 @@ def main(argv=None):
         if not study.trials:
             study.enqueue_trial(defaults_of(space))  # trial 0 = baseline
         remaining = [args.trials]
+        deadline = time.time() + args.hours * 3600 if args.hours > 0 else None
 
         def worker():
             while not STOP.is_set():
                 with lock:
-                    if remaining[0] <= 0:
+                    if remaining[0] <= 0 or (deadline and time.time() > deadline):
                         return
                     remaining[0] -= 1
                     trial = study.ask()
