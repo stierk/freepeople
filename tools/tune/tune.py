@@ -44,13 +44,18 @@ def load_registry(params_dir, override_path):
         if "fixed" in o:
             fixed[name] = o["fixed"]
             continue
-        lo, hi = o.get("min", p.get("min")), o.get("max", p.get("max"))
-        if lo is None or hi is None:
-            if d == 0:
-                print(f"WARNING: {name}: default 0 and no min/max, skipped", file=sys.stderr)
-                continue
-            a, b = sorted((d / 3, d * 3))
-            lo, hi = (a if lo is None else lo), (b if hi is None else hi)
+        # registry min/max are hard clamps; the search band is x0.33..x3 of the default inside them.
+        # ranges_override.json min/max replace the band outright.
+        if d == 0 and "min" not in o and "max" not in o and "min" not in p and "max" not in p:
+            print(f"WARNING: {name}: default 0 and no min/max, skipped", file=sys.stderr)
+            continue
+        a, b = sorted((d / 3, d * 3))
+        lo = o["min"] if "min" in o else max(a, p.get("min", a))
+        hi = o["max"] if "max" in o else min(b, p.get("max", b))
+        if d == 0:
+            lo, hi = o.get("min", p.get("min", 0)), o.get("max", p.get("max", 1))
+        if lo >= hi:
+            lo, hi = min(lo, hi), max(lo, hi)
         scale = p.get("scale", "linear")
         if scale == "log" and lo <= 0:
             print(f"WARNING: {name}: log scale needs min>0, using linear", file=sys.stderr)

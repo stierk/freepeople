@@ -1,7 +1,7 @@
 {
   "w_pop": 1.0,
   "w_cov": 1.0,
-  "w_trade": 0.5,
+  "w_trade": 3.0,
   "std_penalty": 0.25,
   "pop_max": 32,
   "pop_ref": 16,
