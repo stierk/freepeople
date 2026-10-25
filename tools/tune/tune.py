@@ -14,6 +14,8 @@ def seed_score(res, cfg, target_days):
     """Gated score of one run. res=None (crash/timeout) counts as a failed run scoring 0."""
     if not res:
         return 0.0
+    if cfg.get("trade_only"):  # villager trade volume per day, no survival gate
+        return res.get("p2p_volume", 0.0) / target_days
     if not res.get("survived"):
         return min(res.get("days", 0) / target_days, 0.999)
     return (1.0
