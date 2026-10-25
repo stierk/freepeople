@@ -41,14 +41,14 @@ extends RefCounted
 ## the room the two sides have to walk toward each other. It resembles the crown's default
 ## spread (TradeData.DEFAULT_ASK_FACTOR) on purpose — comparable width makes for a market that
 ## clears — but it is NOT derived from it: this is haggling behaviour, that is policy.
-static var SELL_OPTIMISM: float = Tuning.f("SELL_OPTIMISM", 1.3)
+static var SELL_OPTIMISM: float = Tuning.f("SELL_OPTIMISM", 2.106)
 ## How far below their remembered price a buyer opens. Mirror of SELL_OPTIMISM.
-static var BUY_THRIFT: float = Tuning.f("BUY_THRIFT", 0.7)
+static var BUY_THRIFT: float = Tuning.f("BUY_THRIFT", 0.4968)
 ## Multiple of the remembered food price a starving villager will climb to before stopping.
 ## A ceiling of "their entire purse" is what produced the nonsensical demand readings in the
 ## M25 price chart (`payer.gold / want`); hunger should make someone pay well over the odds,
 ## not bid their whole fortune for one meal.
-static var HUNGER_CEILING: float = Tuning.f("HUNGER_CEILING", 3.0)
+static var HUNGER_CEILING: float = Tuning.f("HUNGER_CEILING", 6.618)
 ## Floor under every derived value. Keeps a degenerate valuation (an output good priced at 0, a
 ## recipe with a nonsensical input_amount) from producing a negative bid.
 const MIN_VALUE := 0.0

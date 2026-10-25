@@ -11,14 +11,14 @@ sprite_sheet = "vik"
 sprite_atlas_region = Rect2i(288, 288, 16, 16)
 anim_frames = 1
 max_capacity = 1
-build_time_seconds = 8.0
+build_time_seconds = 9.583
 is_player_placeable = false
 build_cost_gold = 0.0
 build_cost = {
-0: 15.0
+0: 7.448
 }
 storage_capacity = {}
 output_good = 3
 output_amount = 1.0
 output_interval = 0.0
-carry_capacity = 6.0
+carry_capacity = 16.89

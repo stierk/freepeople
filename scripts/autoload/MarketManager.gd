@@ -7,9 +7,9 @@ extends Node
 enum Side { SELL, BUY }
 
 ## Sim seconds between two market ticks (matching + price drift + export).
-var MARKET_TICK_INTERVAL: float = Tuning.f("MARKET_TICK_INTERVAL", 5.0)
+var MARKET_TICK_INTERVAL: float = Tuning.f("MARKET_TICK_INTERVAL", 3.224)
 ## Gold deduction per travel cell when choosing an exchange (price vs. walking distance).
-var DIST_COST_PER_CELL: float = Tuning.f("DIST_COST_PER_CELL", 0.05)
+var DIST_COST_PER_CELL: float = Tuning.f("DIST_COST_PER_CELL", 0.0369)
 
 
 func tick() -> void:

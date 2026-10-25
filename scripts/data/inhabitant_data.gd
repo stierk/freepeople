@@ -27,14 +27,14 @@ enum FarmAction { NONE, PLANT, HARVEST }
 ## Maximum total amount (sum of all goods) an inhabitant can carry at once.
 ## Gold does NOT count toward this. Base value – an inhabitant's actual capacity lives in
 ## `inventory_capacity` and varies with the strength trait (see below).
-static var INVENTORY_CAPACITY: float = Tuning.f("INVENTORY_CAPACITY", 10.0)
+static var INVENTORY_CAPACITY: float = Tuning.f("INVENTORY_CAPACITY", 16.77)
 
 ## M22: this many inventory slots stay reserved for food when loading trade goods.
 ## This way an inhabitant on a long, uninterruptible trip (harvest/deliver) always has
 ## room to buy food if needed – otherwise they'd starve despite having money (full cargo).
-static var FOOD_RESERVE: float = Tuning.f("FOOD_RESERVE", 2.0)
+static var FOOD_RESERVE: float = Tuning.f("FOOD_RESERVE", 1.415)
 
-static var BASE_MOVE_SPEED: float = Tuning.f("BASE_MOVE_SPEED", 24.0)
+static var BASE_MOVE_SPEED: float = Tuning.f("BASE_MOVE_SPEED", 20.78)
 
 # ---------------------------------------------------------------------------
 # M28: evolutionary traits – six character traits, randomized via randf() at spawn
@@ -61,17 +61,17 @@ var trait_resilience: float = 0.0
 ## `recompute_derived_stats`; until then the base value INVENTORY_CAPACITY applies.
 var inventory_capacity: float = INVENTORY_CAPACITY
 
-static var STRENGTH_CAPACITY_BONUS_MAX: float = Tuning.f("STRENGTH_CAPACITY_BONUS_MAX", 4.0)    # +carry capacity at full strength
-static var STRENGTH_SPEED_PENALTY_MAX: float = Tuning.f("STRENGTH_SPEED_PENALTY_MAX", 0.2)     # -20% move speed at full strength
-static var SPEED_MOVE_BONUS_MAX: float = Tuning.f("SPEED_MOVE_BONUS_MAX", 0.25)          # +25% move speed at full speed
-static var SPEED_FOOD_PENALTY_MAX: float = Tuning.f("SPEED_FOOD_PENALTY_MAX", 0.3)         # +30% food need at full speed
-static var FRUGALITY_FOOD_BONUS_MAX: float = Tuning.f("FRUGALITY_FOOD_BONUS_MAX", 0.25)      # -25% food need at full frugality
-static var FRUGALITY_YIELD_PENALTY_MAX: float = Tuning.f("FRUGALITY_YIELD_PENALTY_MAX", 0.15)   # -15% yield at full frugality
-static var DILIGENCE_WORK_BONUS_MAX: float = Tuning.f("DILIGENCE_WORK_BONUS_MAX", 0.25)      # +25% work speed at full diligence
-static var DILIGENCE_HUNGER_PENALTY_MAX: float = Tuning.f("DILIGENCE_HUNGER_PENALTY_MAX", 0.4)   # +40% hunger increase at full diligence
-static var RESILIENCE_HUNGER_TOLERANCE_MAX: float = Tuning.f("RESILIENCE_HUNGER_TOLERANCE_MAX", 2.0)  # + tolerated missed meals
-static var RESILIENCE_WORK_PENALTY_MAX: float = Tuning.f("RESILIENCE_WORK_PENALTY_MAX", 0.2)    # -20% work speed at full resilience
-static var ROUGH_SLEEP_WORK_FACTOR: float = Tuning.f("ROUGH_SLEEP_WORK_FACTOR", 0.75)       # M37: work speed after a night without a house
+static var STRENGTH_CAPACITY_BONUS_MAX: float = Tuning.f("STRENGTH_CAPACITY_BONUS_MAX", 1.647)    # +carry capacity at full strength
+static var STRENGTH_SPEED_PENALTY_MAX: float = Tuning.f("STRENGTH_SPEED_PENALTY_MAX", 0.4715)     # -20% move speed at full strength
+static var SPEED_MOVE_BONUS_MAX: float = Tuning.f("SPEED_MOVE_BONUS_MAX", 0.3881)          # +25% move speed at full speed
+static var SPEED_FOOD_PENALTY_MAX: float = Tuning.f("SPEED_FOOD_PENALTY_MAX", 0.5212)         # +30% food need at full speed
+static var FRUGALITY_FOOD_BONUS_MAX: float = Tuning.f("FRUGALITY_FOOD_BONUS_MAX", 0.6008)      # -25% food need at full frugality
+static var FRUGALITY_YIELD_PENALTY_MAX: float = Tuning.f("FRUGALITY_YIELD_PENALTY_MAX", 0.1503)   # -15% yield at full frugality
+static var DILIGENCE_WORK_BONUS_MAX: float = Tuning.f("DILIGENCE_WORK_BONUS_MAX", 0.2178)      # +25% work speed at full diligence
+static var DILIGENCE_HUNGER_PENALTY_MAX: float = Tuning.f("DILIGENCE_HUNGER_PENALTY_MAX", 1.085)   # +40% hunger increase at full diligence
+static var RESILIENCE_HUNGER_TOLERANCE_MAX: float = Tuning.f("RESILIENCE_HUNGER_TOLERANCE_MAX", 0.9424)  # + tolerated missed meals
+static var RESILIENCE_WORK_PENALTY_MAX: float = Tuning.f("RESILIENCE_WORK_PENALTY_MAX", 0.3295)    # -20% work speed at full resilience
+static var ROUGH_SLEEP_WORK_FACTOR: float = Tuning.f("ROUGH_SLEEP_WORK_FACTOR", 0.4545)       # M37: work speed after a night without a house
 
 
 ## Move speed multiplier from speed (benefit) and strength (drawback).

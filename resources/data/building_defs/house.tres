@@ -10,12 +10,12 @@ footprint_size = Vector2i(1, 1)
 sprite_sheet = "farm"
 sprite_atlas_region = Rect2i(16, 176, 16, 16)
 max_capacity = 4
-build_time_seconds = 10.0
+build_time_seconds = 18.17
 is_player_placeable = false
 build_cost_gold = 0.0
 build_cost = {
-0: 10.0,
-1: 5.0,
-2: 5.0
+0: 23.56,
+1: 6.824,
+2: 8.232
 }
 storage_capacity = {}

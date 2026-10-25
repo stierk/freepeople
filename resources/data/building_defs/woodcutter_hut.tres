@@ -10,13 +10,13 @@ footprint_size = Vector2i(1, 2)
 sprite_sheet = "vik"
 sprite_atlas_region = Rect2i(304, 192, 16, 32)
 max_capacity = 1
-build_time_seconds = 10.0
+build_time_seconds = 12.97
 is_player_placeable = false
 build_cost_gold = 0.0
 build_cost = {}
 storage_capacity = {}
 
 output_good = 0
-output_amount = 1.0
-output_interval = 12.0
-carry_capacity = 8.0
+output_amount = 0.3349
+output_interval = 25.6
+carry_capacity = 8.989

@@ -14,18 +14,18 @@ const RESOURCE_DEPLETION_PER_HARVEST := 0.1
 const PRODUCTION_RETRY_DELAY := 1.0
 
 # --- Terrain regeneration ---
-var RESOURCE_REGEN_INTERVAL: float = Tuning.f("RESOURCE_REGEN_INTERVAL", 5.0)
-var RESOURCE_REGEN_AMOUNT: float = Tuning.f("RESOURCE_REGEN_AMOUNT", 0.05)
-var RESOURCE_REGEN_CHANCE: float = Tuning.f("RESOURCE_REGEN_CHANCE", 0.3)
+var RESOURCE_REGEN_INTERVAL: float = Tuning.f("RESOURCE_REGEN_INTERVAL", 2.551)
+var RESOURCE_REGEN_AMOUNT: float = Tuning.f("RESOURCE_REGEN_AMOUNT", 0.02223)
+var RESOURCE_REGEN_CHANCE: float = Tuning.f("RESOURCE_REGEN_CHANCE", 0.8843)
 
 # --- Tree regrowth (random, exponential with the number of neighboring trees) ---
 ## Base chance per regen tick that a new tree spontaneously grows on a free grass
 ## cell (near 0, but not 0). Per adjacent tree the chance rises by
 ## factor TREE_SPREAD_GROWTH (exponentially), capped at TREE_SPREAD_MAX_CHANCE.
 ## On occupied cells (building, path, wheat, farmland) the chance is 0.
-var TREE_SPREAD_BASE_CHANCE: float = Tuning.f("TREE_SPREAD_BASE_CHANCE", 0.0001)
-var TREE_SPREAD_GROWTH: float = Tuning.f("TREE_SPREAD_GROWTH", 3.0)
-var TREE_SPREAD_MAX_CHANCE: float = Tuning.f("TREE_SPREAD_MAX_CHANCE", 0.25)
+var TREE_SPREAD_BASE_CHANCE: float = Tuning.f("TREE_SPREAD_BASE_CHANCE", 0.0001422)
+var TREE_SPREAD_GROWTH: float = Tuning.f("TREE_SPREAD_GROWTH", 1.352)
+var TREE_SPREAD_MAX_CHANCE: float = Tuning.f("TREE_SPREAD_MAX_CHANCE", 0.6381)
 
 # --- Debug logging ---
 const DEBUG_LOG_INTERVAL := 15.0
@@ -36,32 +36,32 @@ const DAY_LENGTH_SECONDS := 60.0
 # --- On-site resource harvesting (woodcutter/quarry worker) ---
 ## Felling a tree takes half a day; it yields 8 wood (= 8 planks
 ## at the sawmill). The felled tree disappears and can regrow later.
-var WOOD_CUT_TIME: float = Tuning.f("WOOD_CUT_TIME", DAY_LENGTH_SECONDS * 0.5)
+var WOOD_CUT_TIME: float = Tuning.f("WOOD_CUT_TIME", 28.29)
 # A felled tree yields a full 10 wood. This exceeds one carry load, so the woodcutter
 # hauls it home in intervals: whatever fits in the inventory rides along, the rest is
 # credited straight to the hut's woodpile (see _handle_gathering) – no wood is ever lost.
-var WOOD_PER_TREE: float = Tuning.f("WOOD_PER_TREE", 10.0)
+var WOOD_PER_TREE: float = Tuning.f("WOOD_PER_TREE", 7.007)
 ## Mining stone takes a quarter day; the rock remains and regenerates.
-var STONE_MINE_TIME: float = Tuning.f("STONE_MINE_TIME", DAY_LENGTH_SECONDS * 0.25)
-var STONE_PER_MINE: float = Tuning.f("STONE_PER_MINE", 3.0)
-var STONE_DEPLETION_PER_MINE: float = Tuning.f("STONE_DEPLETION_PER_MINE", 0.34)
+var STONE_MINE_TIME: float = Tuning.f("STONE_MINE_TIME", 6.357)
+var STONE_PER_MINE: float = Tuning.f("STONE_PER_MINE", 6.264)
+var STONE_DEPLETION_PER_MINE: float = Tuning.f("STONE_DEPLETION_PER_MINE", 0.5824)
 
 # --- M19: wheat / farming ---
 ## Radius (in cells) around a farm house that counts as farmland.
-var FARM_FIELD_RADIUS: int = Tuning.i("FARM_FIELD_RADIUS", 3)
+var FARM_FIELD_RADIUS: int = Tuning.i("FARM_FIELD_RADIUS", 1)
 ## Seconds per growth stage (STAGE_1 → STAGE_2 → STAGE_3). 1 day per stage
 ## (= DAY_LENGTH_SECONDS), so ~3 days until ripe.
-var CROP_GROW_INTERVAL: float = Tuning.f("CROP_GROW_INTERVAL", 60.0)
+var CROP_GROW_INTERVAL: float = Tuning.f("CROP_GROW_INTERVAL", 36.13)
 ## Ripe wheat (STAGE_3) that goes unharvested for 10 days withers. The wide
 ## harvest window gives a single farmer time to harvest their whole field before
 ## ripe cells wither unharvested.
-var CROP_RIPE_LIFETIME: float = Tuning.f("CROP_RIPE_LIFETIME", DAY_LENGTH_SECONDS * 10.0)
+var CROP_RIPE_LIFETIME: float = Tuning.f("CROP_RIPE_LIFETIME", 839.8)
 ## Withered wheat disappears after one more day.
-var CROP_DEAD_LIFETIME: float = Tuning.f("CROP_DEAD_LIFETIME", DAY_LENGTH_SECONDS)
+var CROP_DEAD_LIFETIME: float = Tuning.f("CROP_DEAD_LIFETIME", 28.54)
 ## Wheat is updated once per second (not every frame).
 const CROP_UPDATE_INTERVAL := 1.0
 ## Food harvest yield per ripe field.
-var CROP_HARVEST_YIELD: float = Tuning.f("CROP_HARVEST_YIELD", 1.0)
+var CROP_HARVEST_YIELD: float = Tuning.f("CROP_HARVEST_YIELD", 2.072)
 
 # --- M29: hunting (hunter) ---
 ## The hunter walks to a forest cell and hunts prey there. Unlike the woodcutter, they don't
@@ -69,24 +69,24 @@ var CROP_HARVEST_YIELD: float = Tuning.f("CROP_HARVEST_YIELD", 1.0)
 ## prey-free for HUNT_REPLENISH_DAYS days (last_hunted_day stamp on the tile). This
 ## makes multiple hunters in the same forest block each other.
 ## X = chance that a fresh (not recently hunted) forest cell contains prey.
-var HUNT_SUCCESS_CHANCE: float = Tuning.f("HUNT_SUCCESS_CHANCE", 0.1)
+var HUNT_SUCCESS_CHANCE: float = Tuning.f("HUNT_SUCCESS_CHANCE", 0.1745)
 ## Y = days until a hunted forest cell can carry prey again.
 var HUNT_REPLENISH_DAYS: int = Tuning.i("HUNT_REPLENISH_DAYS", 4)
 ## Hunting duration on-site – shorter than felling a tree (WOOD_CUT_TIME = half a day),
 ## so a successful hunt feels like "easy food".
-var HUNT_TIME: float = Tuning.f("HUNT_TIME", DAY_LENGTH_SECONDS * 0.33)
+var HUNT_TIME: float = Tuning.f("HUNT_TIME", 27.0)
 ## Food per successful catch at best-case yield (frugality trait = 0.0). With X = 0.1 this
 ## averages to ~0.5 FOOD per hunting attempt – hunting is a marginal supplement to the farm
 ## chain; with many hunters the mutual blocking pushes the yield down further.
-var FOOD_PER_CATCH: float = Tuning.f("FOOD_PER_CATCH", 5.0)
+var FOOD_PER_CATCH: float = Tuning.f("FOOD_PER_CATCH", 5.846)
 ## Guaranteed floor of every successful catch – NOT scaled by yield_multiplier(), so a hunter
 ## always brings back at least this much prey regardless of frugality. Only the remainder
 ## (FOOD_PER_CATCH - HUNT_FOOD_BASE) shrinks with the frugality yield drawback.
-var HUNT_FOOD_BASE: float = Tuning.f("HUNT_FOOD_BASE", 3.0)
+var HUNT_FOOD_BASE: float = Tuning.f("HUNT_FOOD_BASE", 2.149)
 ## M32: a hunter roams from forest cell to forest cell within one trip, rolling for prey at
 ## each, until the carry load is full or this many cells have been worked (bounds bad-luck
 ## trips). Roaming outward from the hut expands the chance of catching prey per outing.
-var HUNT_CELLS_PER_TRIP: int = Tuning.i("HUNT_CELLS_PER_TRIP", 5)
+var HUNT_CELLS_PER_TRIP: int = Tuning.i("HUNT_CELLS_PER_TRIP", 3)
 
 # --- M8/M18: market + food + population ---
 ## M18: base need per inhabitant and meal (before the trait multiplier, see
@@ -97,12 +97,12 @@ var HUNT_CELLS_PER_TRIP: int = Tuning.i("HUNT_CELLS_PER_TRIP", 5)
 ## M35: halved again (0.7 -> 0.35). Everyone eats half as much per meal; the per-inhabitant
 ## trait spread is untouched, because every consumer multiplies this base with
 ## InhabitantData.food_need_multiplier() (frugality/speed) before using it.
-var FOOD_PER_INHABITANT_PER_TICK: float = Tuning.f("FOOD_PER_INHABITANT_PER_TICK", 0.35)
+var FOOD_PER_INHABITANT_PER_TICK: float = Tuning.f("FOOD_PER_INHABITANT_PER_TICK", 0.1219)
 const FOOD_CONSUMPTION_INTERVAL := DAY_LENGTH_SECONDS / 3.0
 ## M22: how little carried food triggers a working inhabitant, at the free decision point
 ## (target selector in _handle_working), to start a buy-food trip. > 1 meal provides a
 ## safety cushion so they don't starve on the way to the granary.
-var FOOD_RESTOCK_THRESHOLD: float = Tuning.f("FOOD_RESTOCK_THRESHOLD", 2.0)
+var FOOD_RESTOCK_THRESHOLD: float = Tuning.f("FOOD_RESTOCK_THRESHOLD", 1.377)
 ## Population cap. M37: births are the only growth (the granary-stock growth of M8/M27 is gone).
 const POP_MAX := 32
 
@@ -113,8 +113,8 @@ const INITIAL_INHABITANT_COUNT := 10
 const INITIAL_SPAWN_INTERVAL := 30.0
 ## Everyone sleeps once per day: at home if they have a house, otherwise rough on the spot
 ## (InhabitantData.ROUGH_SLEEP_WORK_FACTOR until the next night at home).
-var REST_INTERVAL: float = Tuning.f("REST_INTERVAL", DAY_LENGTH_SECONDS)
-var SLEEP_SECONDS: float = Tuning.f("SLEEP_SECONDS", 10.0)
+var REST_INTERVAL: float = Tuning.f("REST_INTERVAL", 140.7)
+var SLEEP_SECONDS: float = Tuning.f("SLEEP_SECONDS", 9.049)
 
 # --- M38: going inside buildings -------------------------------------------------------------
 ## Sim seconds a visitor spends "inside" a storage/market/hut after arriving, hidden by the view.
@@ -127,43 +127,43 @@ const VISIT_STATES := [
 ]
 ## Meals' worth of food carried from the pantry on top of FOOD_RESTOCK_THRESHOLD – so a full
 ## lunchbox lasts about a day before the next food run home.
-var LUNCHBOX_MEALS: float = Tuning.f("LUNCHBOX_MEALS", 3.0)
+var LUNCHBOX_MEALS: float = Tuning.f("LUNCHBOX_MEALS", 3.4)
 ## Housing decision: a free bed must cut the commute to this fraction to be worth moving...
-var HOUSE_MOVE_RATIO: float = Tuning.f("HOUSE_MOVE_RATIO", 0.7)
+var HOUSE_MOVE_RATIO: float = Tuning.f("HOUSE_MOVE_RATIO", 0.4272)
 ## ...and building a new house must save at least this many cells of commute (Manhattan, see
 ## _commute) – and the builder must hold this multiple of its material cost in gold.
-var HOUSE_MIN_SAVING: float = Tuning.f("HOUSE_MIN_SAVING", 8.0)
-var HOUSE_BUILD_GOLD_FACTOR: float = Tuning.f("HOUSE_BUILD_GOLD_FACTOR", 1.2)
+var HOUSE_MIN_SAVING: float = Tuning.f("HOUSE_MIN_SAVING", 12.87)
+var HOUSE_BUILD_GOLD_FACTOR: float = Tuning.f("HOUSE_BUILD_GOLD_FACTOR", 1.858)
 ## How far from the workplace a new house may go (cells, square scan).
-var HOUSE_SITE_RADIUS: int = Tuning.i("HOUSE_SITE_RADIUS", 8)
+var HOUSE_SITE_RADIUS: int = Tuning.i("HOUSE_SITE_RADIUS", 15)
 ## Births: two housemates asleep at home, both fed and solvent, each giving food and gold.
-var BIRTH_MIN_GOLD: float = Tuning.f("BIRTH_MIN_GOLD", 30.0)
-var BIRTH_FOOD_EACH: float = Tuning.f("BIRTH_FOOD_EACH", 3.0)
-var BIRTH_PURSE_FRACTION: float = Tuning.f("BIRTH_PURSE_FRACTION", 0.2)
-var BIRTH_COOLDOWN_DAYS: int = Tuning.i("BIRTH_COOLDOWN_DAYS", 10)
-var BIRTH_TRAIT_MUTATION: float = Tuning.f("BIRTH_TRAIT_MUTATION", 0.1)
+var BIRTH_MIN_GOLD: float = Tuning.f("BIRTH_MIN_GOLD", 47.91)
+var BIRTH_FOOD_EACH: float = Tuning.f("BIRTH_FOOD_EACH", 2.142)
+var BIRTH_PURSE_FRACTION: float = Tuning.f("BIRTH_PURSE_FRACTION", 0.287)
+var BIRTH_COOLDOWN_DAYS: int = Tuning.i("BIRTH_COOLDOWN_DAYS", 6)
+var BIRTH_TRAIT_MUTATION: float = Tuning.f("BIRTH_TRAIT_MUTATION", 0.1482)
 const TITHE_SALE_INTERVAL := 30.0
 ## M18: after this many consecutive missed meals (= 1 day "starved" + 1 more
 ## missed meal) an inhabitant starves to death.
 # M-tuning: hunger deltas per meal and emergency-food threshold, formerly inline literals.
-var HUNGER_RECOVERY_PER_MEAL: float = Tuning.f("HUNGER_RECOVERY_PER_MEAL", 0.1)
-var HUNGER_GAIN_PER_MISS: float = Tuning.f("HUNGER_GAIN_PER_MISS", 0.15)
-var EMERGENCY_FOOD_FACTOR: float = Tuning.f("EMERGENCY_FOOD_FACTOR", 0.5)
-var STARVATION_DEATH_MEALS: int = Tuning.i("STARVATION_DEATH_MEALS", 4)
+var HUNGER_RECOVERY_PER_MEAL: float = Tuning.f("HUNGER_RECOVERY_PER_MEAL", 0.1803)
+var HUNGER_GAIN_PER_MISS: float = Tuning.f("HUNGER_GAIN_PER_MISS", 0.2186)
+var EMERGENCY_FOOD_FACTOR: float = Tuning.f("EMERGENCY_FOOD_FACTOR", 0.6843)
+var STARVATION_DEATH_MEALS: int = Tuning.i("STARVATION_DEATH_MEALS", 6)
 
 # --- M20: market economy ---
 ## Markup factor on the break-even price: reservation = break_even × (1 + margin × MARGIN_SCALE).
-var MARGIN_SCALE: float = Tuning.f("MARGIN_SCALE", 0.5)
+var MARGIN_SCALE: float = Tuning.f("MARGIN_SCALE", 0.5789)
 ## M27: raised from 3 to 5 – turbo test runs showed persistent oscillation between professions
 ## (mainly FARMER↔MILLER↔QUARRY_WORKER) every few weeks, which never gave the food chain
 ## (farmer→mill→bakery) enough uninterrupted time to establish itself before the next switch
 ## broke it again. More patience per profession before it's abandoned as unprofitable.
 ## Number of consecutive unprofitable sales after which an inhabitant switches profession.
-var UNPROFITABLE_SWITCH_STREAK: int = Tuning.i("UNPROFITABLE_SWITCH_STREAK", 5)
+var UNPROFITABLE_SWITCH_STREAK: int = Tuning.i("UNPROFITABLE_SWITCH_STREAK", 10)
 ## M28: greed drawback – a greedy inhabitant (high `margin`) overpays on food purchases by
 ## up to this fraction of the purchase value (the markup flows to the crown treasury). Mirrors
 ## the benefit (higher sell price, see market_exchange.gd) with a drawback.
-var GREED_BUY_PREMIUM_SCALE: float = Tuning.f("GREED_BUY_PREMIUM_SCALE", 0.25)
+var GREED_BUY_PREMIUM_SCALE: float = Tuning.f("GREED_BUY_PREMIUM_SCALE", 0.234)
 ## A2: if a producer carries their goods undelivered for longer than this time (no
 ## sales for that long), they deliver a partial load too, instead of waiting for a full carry
 ## load. Catches the non-hungry farmer who never makes a food trip and would
@@ -176,12 +176,12 @@ const STALE_INVENTORY_SECONDS := DAY_LENGTH_SECONDS
 ## If that doesn't happen within another REPAIR_GRACE_DAYS days (no material/nobody there),
 ## it falls derelict and disappears. During the grace period it gets a brown/grey
 ## color tint (analogous to starving inhabitants).
-var REPAIR_INTERVAL_DAYS: int = Tuning.i("REPAIR_INTERVAL_DAYS", 10)
-var REPAIR_GRACE_DAYS: int = Tuning.i("REPAIR_GRACE_DAYS", 10)
+var REPAIR_INTERVAL_DAYS: int = Tuning.i("REPAIR_INTERVAL_DAYS", 4)
+var REPAIR_GRACE_DAYS: int = Tuning.i("REPAIR_GRACE_DAYS", 5)
 ## A ruin nobody has started restoring is removed this many days after falling derelict.
-var RUIN_LIFETIME_DAYS: int = Tuning.i("RUIN_LIFETIME_DAYS", 10)
+var RUIN_LIFETIME_DAYS: int = Tuning.i("RUIN_LIFETIME_DAYS", 24)
 ## M22: repair material cost = this fraction of the build cost (per good, min 1 unit).
-var REPAIR_MATERIAL_FRACTION: float = Tuning.f("REPAIR_MATERIAL_FRACTION", 0.5)
+var REPAIR_MATERIAL_FRACTION: float = Tuning.f("REPAIR_MATERIAL_FRACTION", 0.2389)
 ## Only these (occupied) work huts are subject to repair; infrastructure without
 ## inhabitants (roads, storage, granary, treasury, town hall) is exempt.
 const REPAIRABLE_BUILDING_TYPES := [
@@ -201,8 +201,8 @@ const REPAIRABLE_BUILDING_TYPES := [
 ## preferred). A derelict ruin costs the same building materials as a new build → only a
 ## moderate bonus (saves build space/prevents sprawl), so a clearly better new
 ## site still wins.
-var REUSE_BONUS_EMPTY: float = Tuning.f("REUSE_BONUS_EMPTY", 1000.0)
-var REUSE_BONUS_DERELICT: float = Tuning.f("REUSE_BONUS_DERELICT", 6.0)
+var REUSE_BONUS_EMPTY: float = Tuning.f("REUSE_BONUS_EMPTY", 1309.0)
+var REUSE_BONUS_DERELICT: float = Tuning.f("REUSE_BONUS_DERELICT", 15.61)
 
 ## M34: how close to the best available appeal another trade must score before its vacant hut may
 ## capture a colonist. REUSE_BONUS_EMPTY (1000) is compared against score_site values in the
@@ -213,7 +213,7 @@ var REUSE_BONUS_DERELICT: float = Tuning.f("REUSE_BONUS_DERELICT", 6.0)
 ## the reclaim silently ignored it. The saved build cost is real, so reuse stays; it just no longer
 ## outranks the economy. HIGHER = stricter: the threshold is `best_appeal * ratio`, so raising it
 ## admits fewer trades, which means more profession diversity but more huts left to fall derelict.
-var CROSS_TRADE_REUSE_RATIO: float = Tuning.f("CROSS_TRADE_REUSE_RATIO", 0.6)
+var CROSS_TRADE_REUSE_RATIO: float = Tuning.f("CROSS_TRADE_REUSE_RATIO", 0.2968)
 
 ## Minimum spacing (sim seconds) between two expensive idle searches by the same
 ## inhabitant (site search, resource/field scan). Without this throttle the
@@ -227,14 +227,14 @@ const IDLE_RETRY_INTERVAL := 0.75
 ## Deliberately real-time bound like IDLE_RETRY_INTERVAL itself (~160 × 0.75s ≈ 2 real minutes),
 ## not sim-time, so a stuck inhabitant gets unstuck within a bounded wall-clock wait regardless
 ## of game speed.
-var RESOURCE_STALL_RETRIES: int = Tuning.i("RESOURCE_STALL_RETRIES", 160)
+var RESOURCE_STALL_RETRIES: int = Tuning.i("RESOURCE_STALL_RETRIES", 82)
 
 ## Sim seconds without build progress (no material delivered, build timer stalls), after
 ## which a stuck build is aborted: the hut remains standing as a reclaimable ruin,
 ## the inhabitant picks a new profession. Prevents someone from being stuck in the
 ## build phase forever and starving in the process. Deliberately > a typical build time, so a
 ## legitimately slow build (often interrupted for food) isn't falsely aborted.
-var BUILD_STALL_TIMEOUT: float = Tuning.f("BUILD_STALL_TIMEOUT", DAY_LENGTH_SECONDS * 0.75)
+var BUILD_STALL_TIMEOUT: float = Tuning.f("BUILD_STALL_TIMEOUT", 21.66)
 
 ## M31: personal price ceiling (willingness to pay) for building/repair material and profession
 ## raw material. Starts at the market's fair price (crown_ask) and rises toward the buyer's full
@@ -247,18 +247,18 @@ var BUILD_STALL_TIMEOUT: float = Tuning.f("BUILD_STALL_TIMEOUT", DAY_LENGTH_SECO
 ## Base 0.3 day, max factor 1.4 (full resilience, no diligence) → worst case 25.2s, still well
 ## below BUILD_STALL_TIMEOUT's 45s so even the most patient inhabitant reaches full willingness
 ## before a stall abort.
-var RESOURCE_PATIENCE_SECONDS: float = Tuning.f("RESOURCE_PATIENCE_SECONDS", DAY_LENGTH_SECONDS * 0.3)
-var RESILIENCE_PATIENCE_BONUS_MAX: float = Tuning.f("RESILIENCE_PATIENCE_BONUS_MAX", 0.4)      # +40% patience at full resilience
-var DILIGENCE_IMPATIENCE_PENALTY_MAX: float = Tuning.f("DILIGENCE_IMPATIENCE_PENALTY_MAX", 0.4)   # -40% patience at full diligence (wants material NOW)
+var RESOURCE_PATIENCE_SECONDS: float = Tuning.f("RESOURCE_PATIENCE_SECONDS", 24.19)
+var RESILIENCE_PATIENCE_BONUS_MAX: float = Tuning.f("RESILIENCE_PATIENCE_BONUS_MAX", 0.4842)      # +40% patience at full resilience
+var DILIGENCE_IMPATIENCE_PENALTY_MAX: float = Tuning.f("DILIGENCE_IMPATIENCE_PENALTY_MAX", 0.6763)   # -40% patience at full diligence (wants material NOW)
 
 ## Market trade: from this stock amount onward a good counts as "surplus" and is sold
 var MARKET_SURPLUS_THRESHOLD := {
-	Goods.GoodType.WOOD: Tuning.f("MARKET_SURPLUS_THRESHOLD_WOOD", 30.0),
-	Goods.GoodType.PLANKS: Tuning.f("MARKET_SURPLUS_THRESHOLD_PLANKS", 30.0),
-	Goods.GoodType.STONE: Tuning.f("MARKET_SURPLUS_THRESHOLD_STONE", 30.0),
+	Goods.GoodType.WOOD: Tuning.f("MARKET_SURPLUS_THRESHOLD_WOOD", 14.48),
+	Goods.GoodType.PLANKS: Tuning.f("MARKET_SURPLUS_THRESHOLD_PLANKS", 23.74),
+	Goods.GoodType.STONE: Tuning.f("MARKET_SURPLUS_THRESHOLD_STONE", 38.11),
 }
-var MARKET_SELL_FRACTION: float = Tuning.f("MARKET_SELL_FRACTION", 0.2)
-var MARKET_FOOD_IMPORT_SHARE: float = Tuning.f("MARKET_FOOD_IMPORT_SHARE", 0.5)
+var MARKET_SELL_FRACTION: float = Tuning.f("MARKET_SELL_FRACTION", 0.3919)
+var MARKET_FOOD_IMPORT_SHARE: float = Tuning.f("MARKET_FOOD_IMPORT_SHARE", 0.2828)
 
 const BUILDING_TYPE_TO_TERRAIN := {
 	BuildingDef.BuildingType.WOODCUTTER_HUT: TileRuntimeData.TerrainType.FOREST,
@@ -1870,15 +1870,15 @@ func _offer_carried_goods(inh: InhabitantData, market: BuildingInstance) -> void
 # ---------------------------------------------------------------------------
 ## Base cushion everyone wants to carry. Deliberately above FOOD_RESTOCK_THRESHOLD (2.0), otherwise
 ## the very first meal would immediately trigger the next buying trip (a travel treadmill).
-var FOOD_BASE_STOCK: float = Tuning.f("FOOD_BASE_STOCK", 3.0)
+var FOOD_BASE_STOCK: float = Tuning.f("FOOD_BASE_STOCK", 3.183)
 
 ## A: Sicherheitsmarge (zusätzliche Mahlzeiten über dem reinen Reisebedarf), skaliert mit
 ## Resilience: ängstliche (niedrige Resilienz) tragen mehr Polster, robuste weniger.
-var SAFETY_MEALS_MAX: float = Tuning.f("SAFETY_MEALS_MAX", 2.0)   # trait_resilience = 0.0
-var SAFETY_MEALS_MIN: float = Tuning.f("SAFETY_MEALS_MIN", 0.5)   # trait_resilience = 1.0
+var SAFETY_MEALS_MAX: float = Tuning.f("SAFETY_MEALS_MAX", 2.242)   # trait_resilience = 0.0
+var SAFETY_MEALS_MIN: float = Tuning.f("SAFETY_MEALS_MIN", 0.7436)   # trait_resilience = 1.0
 ## Harte Obergrenze des Nahrungsvorrats, damit nie das halbe Inventar mit Essen verstopft.
 ## Auf dieser kleinen Karte greift meist die Distanz-Formel (~2–4), der Deckel ist Sicherheitsnetz.
-var FOOD_STOCK_CAP: float = Tuning.f("FOOD_STOCK_CAP", 6.0)
+var FOOD_STOCK_CAP: float = Tuning.f("FOOD_STOCK_CAP", 15.71)
 
 ## Wie viel Nahrung der Bewohner mitnehmen WILL – abgeleitet aus der Reisezeit zum nächsten
 ## Kornspeicher (Hin+Zurück) plus einer resilienz-abhängigen Sicherheitsmarge. Untergrenze

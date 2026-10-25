@@ -1,95 +1,95 @@
 {
  "RESOURCE_REGEN_INTERVAL": {
-  "default": 5.0,
+  "default": 2.551,
   "type": "float",
   "scale": "log"
  },
  "RESOURCE_REGEN_AMOUNT": {
-  "default": 0.05,
+  "default": 0.02223,
   "type": "float",
   "scale": "log"
  },
  "RESOURCE_REGEN_CHANCE": {
-  "default": 0.3,
+  "default": 0.8843,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "TREE_SPREAD_BASE_CHANCE": {
-  "default": 0.0001,
+  "default": 0.0001422,
   "type": "float",
   "scale": "log",
   "min": 1e-05,
   "max": 0.01
  },
  "TREE_SPREAD_GROWTH": {
-  "default": 3.0,
+  "default": 1.352,
   "type": "float",
   "scale": "log"
  },
  "TREE_SPREAD_MAX_CHANCE": {
-  "default": 0.25,
+  "default": 0.6381,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "WOOD_CUT_TIME": {
-  "default": 30.0,
+  "default": 28.29,
   "type": "float",
   "scale": "log"
  },
  "WOOD_PER_TREE": {
-  "default": 10.0,
+  "default": 7.007,
   "type": "float",
   "scale": "log"
  },
  "STONE_MINE_TIME": {
-  "default": 15.0,
+  "default": 6.357,
   "type": "float",
   "scale": "log"
  },
  "STONE_PER_MINE": {
-  "default": 3.0,
+  "default": 6.264,
   "type": "float",
   "scale": "log"
  },
  "STONE_DEPLETION_PER_MINE": {
-  "default": 0.34,
+  "default": 0.5824,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "FARM_FIELD_RADIUS": {
-  "default": 3,
+  "default": 1,
   "type": "int",
   "scale": "log",
   "min": 1
  },
  "CROP_GROW_INTERVAL": {
-  "default": 60.0,
+  "default": 36.13,
   "type": "float",
   "scale": "log"
  },
  "CROP_RIPE_LIFETIME": {
-  "default": 600.0,
+  "default": 839.8,
   "type": "float",
   "scale": "log"
  },
  "CROP_DEAD_LIFETIME": {
-  "default": 60.0,
+  "default": 28.54,
   "type": "float",
   "scale": "log"
  },
  "CROP_HARVEST_YIELD": {
-  "default": 1.0,
+  "default": 2.072,
   "type": "float",
   "scale": "log"
  },
  "HUNT_SUCCESS_CHANCE": {
-  "default": 0.1,
+  "default": 0.1745,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
@@ -102,266 +102,266 @@
   "min": 1
  },
  "HUNT_TIME": {
-  "default": 19.8,
+  "default": 27.0,
   "type": "float",
   "scale": "log"
  },
  "FOOD_PER_CATCH": {
-  "default": 5.0,
+  "default": 5.846,
   "type": "float",
   "scale": "log"
  },
  "HUNT_FOOD_BASE": {
-  "default": 3.0,
+  "default": 2.149,
   "type": "float",
   "scale": "log"
  },
  "HUNT_CELLS_PER_TRIP": {
-  "default": 5,
+  "default": 3,
   "type": "int",
   "scale": "log",
   "min": 1
  },
  "FOOD_PER_INHABITANT_PER_TICK": {
-  "default": 0.35,
+  "default": 0.1219,
   "type": "float",
   "scale": "log"
  },
  "FOOD_RESTOCK_THRESHOLD": {
-  "default": 2.0,
+  "default": 1.377,
   "type": "float",
   "scale": "log"
  },
  "REST_INTERVAL": {
-  "default": 60.0,
+  "default": 140.7,
   "type": "float",
   "scale": "log"
  },
  "SLEEP_SECONDS": {
-  "default": 10.0,
+  "default": 9.049,
   "type": "float",
   "scale": "log"
  },
  "LUNCHBOX_MEALS": {
-  "default": 3.0,
+  "default": 3.4,
   "type": "float",
   "scale": "log"
  },
  "HOUSE_MOVE_RATIO": {
-  "default": 0.7,
+  "default": 0.4272,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "HOUSE_MIN_SAVING": {
-  "default": 8.0,
+  "default": 12.87,
   "type": "float",
   "scale": "log"
  },
  "HOUSE_BUILD_GOLD_FACTOR": {
-  "default": 1.2,
+  "default": 1.858,
   "type": "float",
   "scale": "log"
  },
  "HOUSE_SITE_RADIUS": {
-  "default": 8,
+  "default": 15,
   "type": "int",
   "scale": "log",
   "min": 1
  },
  "BIRTH_MIN_GOLD": {
-  "default": 30.0,
+  "default": 47.91,
   "type": "float",
   "scale": "log"
  },
  "BIRTH_FOOD_EACH": {
-  "default": 3.0,
+  "default": 2.142,
   "type": "float",
   "scale": "log"
  },
  "BIRTH_PURSE_FRACTION": {
-  "default": 0.2,
+  "default": 0.287,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "BIRTH_COOLDOWN_DAYS": {
-  "default": 10,
+  "default": 6,
   "type": "int",
   "scale": "log"
  },
  "BIRTH_TRAIT_MUTATION": {
-  "default": 0.1,
+  "default": 0.1482,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "STARVATION_DEATH_MEALS": {
-  "default": 4,
+  "default": 6,
   "type": "int",
   "scale": "log",
   "min": 1
  },
  "MARGIN_SCALE": {
-  "default": 0.5,
+  "default": 0.5789,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "UNPROFITABLE_SWITCH_STREAK": {
-  "default": 5,
+  "default": 10,
   "type": "int",
   "scale": "log",
   "min": 1
  },
  "GREED_BUY_PREMIUM_SCALE": {
-  "default": 0.25,
+  "default": 0.234,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "REPAIR_INTERVAL_DAYS": {
-  "default": 10,
+  "default": 4,
   "type": "int",
   "scale": "log",
   "min": 1
  },
  "REPAIR_GRACE_DAYS": {
-  "default": 10,
+  "default": 5,
   "type": "int",
   "scale": "log",
   "min": 1
  },
  "RUIN_LIFETIME_DAYS": {
-  "default": 10,
+  "default": 24,
   "type": "int",
   "scale": "log",
   "min": 1
  },
  "REPAIR_MATERIAL_FRACTION": {
-  "default": 0.5,
+  "default": 0.2389,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "REUSE_BONUS_EMPTY": {
-  "default": 1000.0,
+  "default": 1309.0,
   "type": "float",
   "scale": "log"
  },
  "REUSE_BONUS_DERELICT": {
-  "default": 6.0,
+  "default": 15.61,
   "type": "float",
   "scale": "log"
  },
  "CROSS_TRADE_REUSE_RATIO": {
-  "default": 0.6,
+  "default": 0.2968,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "RESOURCE_STALL_RETRIES": {
-  "default": 160,
+  "default": 82,
   "type": "int",
   "scale": "log",
   "min": 1
  },
  "BUILD_STALL_TIMEOUT": {
-  "default": 45.0,
+  "default": 21.66,
   "type": "float",
   "scale": "log"
  },
  "RESOURCE_PATIENCE_SECONDS": {
-  "default": 18.0,
+  "default": 24.19,
   "type": "float",
   "scale": "log"
  },
  "RESILIENCE_PATIENCE_BONUS_MAX": {
-  "default": 0.4,
+  "default": 0.4842,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "DILIGENCE_IMPATIENCE_PENALTY_MAX": {
-  "default": 0.4,
+  "default": 0.6763,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "MARKET_SELL_FRACTION": {
-  "default": 0.2,
+  "default": 0.3919,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "MARKET_FOOD_IMPORT_SHARE": {
-  "default": 0.5,
+  "default": 0.2828,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "FOOD_BASE_STOCK": {
-  "default": 3.0,
+  "default": 3.183,
   "type": "float",
   "scale": "log"
  },
  "SAFETY_MEALS_MAX": {
-  "default": 2.0,
+  "default": 2.242,
   "type": "float",
   "scale": "log"
  },
  "SAFETY_MEALS_MIN": {
-  "default": 0.5,
+  "default": 0.7436,
   "type": "float",
   "scale": "log"
  },
  "FOOD_STOCK_CAP": {
-  "default": 6.0,
+  "default": 15.71,
   "type": "float",
   "scale": "log"
  },
  "MARKET_SURPLUS_THRESHOLD_WOOD": {
-  "default": 30.0,
+  "default": 14.48,
   "type": "float",
   "scale": "log"
  },
  "MARKET_SURPLUS_THRESHOLD_PLANKS": {
-  "default": 30.0,
+  "default": 23.74,
   "type": "float",
   "scale": "log"
  },
  "MARKET_SURPLUS_THRESHOLD_STONE": {
-  "default": 30.0,
+  "default": 38.11,
   "type": "float",
   "scale": "log"
  },
  "HUNGER_RECOVERY_PER_MEAL": {
-  "default": 0.1,
+  "default": 0.1803,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "HUNGER_GAIN_PER_MISS": {
-  "default": 0.15,
+  "default": 0.2186,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
   "max": 1.0
  },
  "EMERGENCY_FOOD_FACTOR": {
-  "default": 0.5,
+  "default": 0.6843,
   "type": "float",
   "scale": "linear",
   "min": 0.0,
